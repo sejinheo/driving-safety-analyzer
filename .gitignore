@@ -1,6 +1,7 @@
 data/
 docs/
 **/CLAUDE.md
+.env
 .DS_Store
 .omc/
 .venv/
