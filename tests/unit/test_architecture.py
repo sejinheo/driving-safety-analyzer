@@ -42,9 +42,7 @@ def test_no_row_loop_methods() -> None:
         and isinstance(node.func, ast.Attribute)
         and node.func.attr in ROW_LOOP_METHODS
     ]
-    assert not violations, "use Polars expressions instead of row loops:\n" + "\n".join(
-        violations
-    )
+    assert not violations, "use Polars expressions instead of row loops:\n" + "\n".join(violations)
 
 
 def test_endpoints_are_sync_def() -> None:
