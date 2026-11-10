@@ -13,7 +13,7 @@ services:
     restart: on-failure
 
   db:
-    image: postgres:17
+    image: postgis/postgis:17-3.4
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
