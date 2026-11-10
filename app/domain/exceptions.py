@@ -20,6 +20,29 @@ class AppError(ABC, Exception):
         self.detail = detail or {}
 
 
+class RunNotFoundError(AppError):
+    """Run이 존재하지 않는 경우."""
+
+    code = "RUN_NOT_FOUND"
+    status_code = 404
+
+    def __init__(self, run_id: int) -> None:
+        super().__init__(
+            message=f"Run {run_id} not found",
+            detail={"run_id": run_id},
+        )
+
+
+class AnalysisInProgressError(AppError):
+    """분석이 진행 중인 상태에서 보호구역 교체를 시도한 경우."""
+
+    code = "ANALYSIS_IN_PROGRESS"
+    status_code = 423
+
+    def __init__(self) -> None:
+        super().__init__(message="Analysis is in progress. Complete it before updating zones")
+
+
 class TripNotFoundError(AppError):
     """Trip이 존재하지 않거나 run이 COMPLETED가 아닌 경우."""
 
