@@ -14,14 +14,6 @@ def normalize(
     df: pl.DataFrame,
     params: AnalysisParams,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """원본 레코드 DataFrame을 정규화한다.
-
-    Returns:
-        (clean, rejected): clean은 정규화된 레코드, rejected는 격리된 레코드(원본 + reason 컬럼)
-        clean 컬럼: vehicle_id(str), ts(i64), speed(f64|null), lat(f64|null), lon(f64|null),
-                    speed_invalid(bool), speed_out_of_range(bool),
-                    gps_swapped(bool), gps_invalid(bool)
-    """
     rejected_frames: list[pl.DataFrame] = []
 
     df, rej = _reject(df, pl.col("ts_raw").is_null(), "MISSING_TIMESTAMP")
@@ -40,21 +32,48 @@ def normalize(
     rejected_frames.append(rej)
 
     df = df.with_columns(
-        _parse_speed_expr(params).alias("speed"),
-        _speed_invalid_expr().alias("speed_invalid"),
-        _speed_out_of_range_expr(params).alias("speed_out_of_range"),
+        pl.col("speed_raw").cast(pl.Float64, strict=False).alias("_speed"),
+        pl.col("lat_raw").cast(pl.Float64, strict=False).alias("_lat"),
+        pl.col("lon_raw").cast(pl.Float64, strict=False).alias("_lon"),
     )
 
     df = df.with_columns(
-        _gps_swapped_expr(params).alias("gps_swapped"),
+        pl.when(
+            pl.col("_speed").is_not_null()
+            & (pl.col("_speed") >= 0)
+            & (pl.col("_speed") <= params.speed_max_kmh)
+        )
+        .then(pl.col("_speed"))
+        .alias("speed"),
+        (pl.col("speed_raw").is_not_null() & pl.col("_speed").is_null()).alias("speed_invalid"),
+        (
+            pl.col("_speed").is_not_null()
+            & ((pl.col("_speed") < 0) | (pl.col("_speed") > params.speed_max_kmh))
+        ).alias("speed_out_of_range"),
+        (
+            pl.col("_lat").is_not_null()
+            & pl.col("_lon").is_not_null()
+            & pl.col("_lat").is_between(params.lon_min, params.lon_max)
+            & pl.col("_lon").is_between(params.lat_min, params.lat_max)
+        ).alias("gps_swapped"),
     )
+
     df = df.with_columns(
-        _apply_swap_expr().alias("lat"),
-        _apply_swap_expr(swap_lon=True).alias("lon"),
+        pl.when(pl.col("gps_swapped")).then(pl.col("_lon")).otherwise(pl.col("_lat")).alias("lat"),
+        pl.when(pl.col("gps_swapped")).then(pl.col("_lat")).otherwise(pl.col("_lon")).alias("lon"),
     )
+
     df = df.with_columns(
-        _gps_invalid_expr(params).alias("gps_invalid"),
+        (
+            pl.col("lat").is_null()
+            | pl.col("lon").is_null()
+            | (pl.col("lat") == 0)
+            | (pl.col("lon") == 0)
+            | ~pl.col("lat").is_between(params.lat_min, params.lat_max)
+            | ~pl.col("lon").is_between(params.lon_min, params.lon_max)
+        ).alias("gps_invalid"),
     )
+
     df = df.with_columns(
         pl.when(pl.col("gps_invalid"))
         .then(pl.lit(None, dtype=pl.Float64))
@@ -64,10 +83,7 @@ def normalize(
         .then(pl.lit(None, dtype=pl.Float64))
         .otherwise(pl.col("lon"))
         .alias("lon"),
-    )
-
-    df = df.with_columns(
-        pl.col("vehicle_id").cast(pl.String).fill_null("UNKNOWN").alias("vehicle_id")
+        pl.col("vehicle_id").cast(pl.String).fill_null("UNKNOWN").alias("vehicle_id"),
     )
 
     clean = df.select(
@@ -99,7 +115,8 @@ def _reject(
 
 
 def _parse_ts_expr() -> pl.Expr:
-    numeric = pl.col("ts_raw").cast(pl.Float64, strict=False).pipe(_numeric_ts_to_epoch)
+    ts_float = pl.col("ts_raw").cast(pl.Float64, strict=False)
+    numeric = ts_float.pipe(_numeric_ts_to_epoch)
     iso = (
         pl.col("ts_raw")
         .cast(pl.String, strict=False)
@@ -107,8 +124,7 @@ def _parse_ts_expr() -> pl.Expr:
         .str.to_datetime(format="%Y-%m-%dT%H:%M:%S%z", strict=False)
         .dt.epoch(time_unit="s")
     )
-    is_numeric = pl.col("ts_raw").cast(pl.Float64, strict=False).is_not_null()
-    return pl.when(is_numeric).then(numeric).otherwise(iso)
+    return pl.when(ts_float.is_not_null()).then(numeric).otherwise(iso)
 
 
 def _numeric_ts_to_epoch(expr: pl.Expr) -> pl.Expr:
@@ -122,55 +138,6 @@ def _numeric_ts_to_epoch(expr: pl.Expr) -> pl.Expr:
         .then(expr / 1e6)
         .otherwise(expr / 1e9)
         .cast(pl.Int64, strict=False)
-    )
-
-
-def _parse_speed_expr(params: AnalysisParams) -> pl.Expr:
-    raw = pl.col("speed_raw").cast(pl.Float64, strict=False)
-    return pl.when(raw.is_not_null() & (raw >= 0) & (raw <= params.speed_max_kmh)).then(raw)
-
-
-def _speed_invalid_expr() -> pl.Expr:
-    return (
-        pl.col("speed_raw").is_not_null()
-        & pl.col("speed_raw").cast(pl.Float64, strict=False).is_null()
-    )
-
-
-def _speed_out_of_range_expr(params: AnalysisParams) -> pl.Expr:
-    raw = pl.col("speed_raw").cast(pl.Float64, strict=False)
-    return raw.is_not_null() & ((raw < 0) | (raw > params.speed_max_kmh))
-
-
-def _gps_swapped_expr(params: AnalysisParams) -> pl.Expr:
-    lat = pl.col("lat_raw").cast(pl.Float64, strict=False)
-    lon = pl.col("lon_raw").cast(pl.Float64, strict=False)
-    return (
-        lat.is_not_null()
-        & lon.is_not_null()
-        & lat.is_between(params.lon_min, params.lon_max)
-        & lon.is_between(params.lat_min, params.lat_max)
-    )
-
-
-def _apply_swap_expr(swap_lon: bool = False) -> pl.Expr:
-    lat = pl.col("lat_raw").cast(pl.Float64, strict=False)
-    lon = pl.col("lon_raw").cast(pl.Float64, strict=False)
-    if swap_lon:
-        return pl.when(pl.col("gps_swapped")).then(lat).otherwise(lon)
-    return pl.when(pl.col("gps_swapped")).then(lon).otherwise(lat)
-
-
-def _gps_invalid_expr(params: AnalysisParams) -> pl.Expr:
-    lat = pl.col("lat")
-    lon = pl.col("lon")
-    return (
-        lat.is_null()
-        | lon.is_null()
-        | (lat == 0)
-        | (lon == 0)
-        | ~lat.is_between(params.lat_min, params.lat_max)
-        | ~lon.is_between(params.lon_min, params.lon_max)
     )
 
 
@@ -190,13 +157,12 @@ def _parse_ts_single(raw: object) -> int | None:
             return int(v / 1e6)
         return int(v / 1e9)
     if isinstance(raw, str):
-        raw = raw.strip()
+        s = raw.strip()
         try:
-            return _parse_ts_single(float(raw))
+            return _parse_ts_single(float(s))
         except ValueError:
             pass
         try:
-            s = raw
             if s.endswith("Z"):
                 s = s[:-1] + "+00:00"
             dt = datetime.fromisoformat(s)
