@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.enums import RunStatus
 from app.domain.exceptions import DataIngestionError, DbUnavailableError, TripNotFoundError
-from app.infra.persistence.models import AnalysisRun, Event, Trip, TripPoint
+from app.infra.persistence.models import AnalysisRun, Event, Trip
 
 logger = structlog.get_logger(__name__)
 
@@ -83,7 +83,22 @@ def save_trips_batch(
         raise DataIngestionError(str(exc)) from exc
 
 
-def get_trip(session: Session, *, trip_id: int) -> tuple[Trip, list[TripPoint], list[Event]]:
+def get_trip_with_events(session: Session, *, trip_id: int) -> tuple[Trip, list[Event]]:
+    trip = _fetch_completed_trip(session, trip_id=trip_id)
+
+    try:
+        trip_events = list(
+            session.execute(
+                select(Event).where(Event.trip_id == trip_id).order_by(Event.start_ts)
+            ).scalars()
+        )
+    except SAOperationalError as exc:
+        raise DbUnavailableError() from exc
+
+    return trip, trip_events
+
+
+def _fetch_completed_trip(session: Session, *, trip_id: int) -> Trip:
     try:
         result = session.execute(
             select(Trip, AnalysisRun)
@@ -98,22 +113,7 @@ def get_trip(session: Session, *, trip_id: int) -> tuple[Trip, list[TripPoint], 
         raise TripNotFoundError(trip_id)
 
     trip, _ = result
-
-    try:
-        trip_points = list(
-            session.execute(
-                select(TripPoint).where(TripPoint.trip_id == trip_id).order_by(TripPoint.ts)
-            ).scalars()
-        )
-        trip_events = list(
-            session.execute(
-                select(Event).where(Event.trip_id == trip_id).order_by(Event.start_ts)
-            ).scalars()
-        )
-    except SAOperationalError as exc:
-        raise DbUnavailableError() from exc
-
-    return trip, trip_points, trip_events
+    return trip
 
 
 def _insert_trips(

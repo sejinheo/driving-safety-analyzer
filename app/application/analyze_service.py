@@ -98,7 +98,7 @@ def _run_analysis(
                 session.commit()
             except Exception:
                 logger.exception("failed_to_mark_run_failed", run_id=run_id)
-                raise
+            raise
 
 
 def _ingest(

@@ -37,10 +37,3 @@ class AcceptedResponse(BaseModel):
     status: RunStatus
 
 
-class AnalyzeResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    run_id: int
-    status: RunStatus
-    report: AnalysisReport
-    trips: list[TripSummary]
