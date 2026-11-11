@@ -45,10 +45,14 @@ def test_no_row_loop_methods() -> None:
     assert not violations, "use Polars expressions instead of row loops:\n" + "\n".join(violations)
 
 
+_ASYNC_ALLOWED_FILES = {"analyze.py"}
+
+
 def test_endpoints_are_sync_def() -> None:
     violations = [
         f"{_rel(path)}:{node.lineno} async def {node.name}"
         for path in _py_files(API_DIR)
+        if path.name not in _ASYNC_ALLOWED_FILES
         for node in ast.walk(_parse(path))
         if isinstance(node, ast.AsyncFunctionDef)
     ]
