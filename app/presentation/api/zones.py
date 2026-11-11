@@ -1,7 +1,7 @@
 import ijson  # type: ignore[import-untyped]
 from fastapi import APIRouter, UploadFile
 
-from app.application import zone_usecase
+from app.application import zone_service
 from app.application.dto.zone_dto import ZoneResponse
 from app.domain.exceptions import InvalidLogFormatError, InvalidZoneDataError
 from app.presentation.deps import ConnDep, ParamsDep
@@ -29,5 +29,5 @@ def register_zones(
     if non_dict_indices:
         raise InvalidZoneDataError(f"index {non_dict_indices[:5]} 항목이 객체가 아닙니다")
 
-    inserted = zone_usecase.register_zones(conn, raw=raw, params=params)
+    inserted = zone_service.register_zones(conn, raw=raw, params=params)
     return ZoneResponse(inserted=inserted)
