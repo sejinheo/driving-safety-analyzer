@@ -19,6 +19,7 @@ _ACTIVE_STATUS_VALUES: Final = [s.value for s in _ACTIVE_STATUSES]
 
 _CHECK_ACTIVE_RUNS: Final = "SELECT 1 FROM analysis_runs WHERE status = ANY(%s) LIMIT 1"
 
+_LOCK_ZONES_TABLE: Final = "LOCK TABLE school_zones IN ACCESS EXCLUSIVE MODE"
 _DELETE_ALL_ZONES: Final = "DELETE FROM school_zones"
 
 _COPY_ZONES: Final = "COPY school_zones (name, lat, lon, radius_m, geom) FROM STDIN"
@@ -27,6 +28,7 @@ _COPY_ZONES: Final = "COPY school_zones (name, lat, lon, radius_m, geom) FROM ST
 def replace_all(conn: Connection, *, zones: list[Zone]) -> int:
     try:
         with conn.transaction():
+            conn.execute(_LOCK_ZONES_TABLE)
             row = conn.execute(_CHECK_ACTIVE_RUNS, (_ACTIVE_STATUS_VALUES,)).fetchone()
             if row is not None:
                 raise AnalysisInProgressError()
@@ -45,16 +47,11 @@ def replace_all(conn: Connection, *, zones: list[Zone]) -> int:
 def _copy_zones(conn: Connection, *, zones: list[Zone]) -> int:
     if not zones:
         return 0
+    inserted = 0
     with conn.cursor() as cur, cur.copy(_COPY_ZONES) as copy:
         for z in zones:
             for name in z.names:
-                copy.write_row(
-                    (
-                        name,
-                        z.lat,
-                        z.lon,
-                        z.radius_m,
-                        f"SRID=4326;POINT({z.lon} {z.lat})",
-                    )
-                )
-    return sum(len(z.names) for z in zones)
+                geom = f"SRID=4326;POINT({z.lon} {z.lat})"
+                copy.write_row((name, z.lat, z.lon, z.radius_m, geom))
+                inserted += 1
+    return inserted

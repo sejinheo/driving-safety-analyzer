@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     ts_min: int = 946684800
     ts_max: int = 4102444800
     db_retry_max: int = 3
+    db_pool_min_size: int = 2
+    db_pool_max_size: int = 10
 
     def to_analysis_params(self) -> AnalysisParams:
         return AnalysisParams(
