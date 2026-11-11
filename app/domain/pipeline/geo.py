@@ -3,7 +3,7 @@ import math
 import numpy as np
 import numpy.typing as npt
 
-_EARTH_RADIUS_M: float = 6_371_000.0
+EARTH_RADIUS_M: float = 6_371_000.0
 
 
 def haversine_m(
@@ -19,7 +19,7 @@ def haversine_m(
     dlon = np.radians(lon2 - lon1)
 
     a = np.sin(dlat / 2) ** 2 + np.cos(lat1_r) * np.cos(lat2_r) * np.sin(dlon / 2) ** 2
-    return _EARTH_RADIUS_M * 2 * np.arcsin(np.sqrt(a))
+    return EARTH_RADIUS_M * 2 * np.arcsin(np.sqrt(a))
 
 
 def haversine_m_bruteforce(
@@ -35,4 +35,4 @@ def haversine_m_bruteforce(
     dlon = math.radians(lon2 - lon1)
 
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1_r) * math.cos(lat2_r) * math.sin(dlon / 2) ** 2
-    return _EARTH_RADIUS_M * 2 * math.asin(math.sqrt(a))
+    return EARTH_RADIUS_M * 2 * math.asin(math.sqrt(a))

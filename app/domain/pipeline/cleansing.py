@@ -1,8 +1,7 @@
 import polars as pl
 
 from app.domain.params import AnalysisParams
-
-_EARTH_RADIUS_M: float = 6_371_000.0
+from app.domain.pipeline.geo import EARTH_RADIUS_M
 
 
 def _haversine_expr(lat1: pl.Expr, lon1: pl.Expr, lat2: pl.Expr, lon2: pl.Expr) -> pl.Expr:
@@ -11,7 +10,7 @@ def _haversine_expr(lat1: pl.Expr, lon1: pl.Expr, lat2: pl.Expr, lon2: pl.Expr) 
     a = (dlat / 2).sin().pow(2) + lat1.radians().cos() * lat2.radians().cos() * (
         dlon / 2
     ).sin().pow(2)
-    return _EARTH_RADIUS_M * 2 * a.clip(0.0, 1.0).sqrt().arcsin()
+    return EARTH_RADIUS_M * 2 * a.clip(0.0, 1.0).sqrt().arcsin()
 
 
 def merge_duplicates(df: pl.DataFrame) -> tuple[pl.DataFrame, int]:
