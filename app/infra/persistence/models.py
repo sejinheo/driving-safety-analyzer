@@ -70,6 +70,7 @@ class RawRecord(Base):
 
 class RejectedRecord(Base):
     __tablename__ = "rejected_records"
+    __table_args__ = (Index("ix_rejected_records_run_id", "run_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     run_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("analysis_runs.id"))
@@ -80,6 +81,7 @@ class RejectedRecord(Base):
 
 class Trip(Base):
     __tablename__ = "trips"
+    __table_args__ = (Index("ix_trips_run_id", "run_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     run_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("analysis_runs.id"))
@@ -95,7 +97,6 @@ class Trip(Base):
 
 class TripPoint(Base):
     __tablename__ = "trip_points"
-    __table_args__ = (Index("ix_trip_points_trip_ts", "trip_id", "ts"),)
 
     trip_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("trips.id", ondelete="CASCADE"), primary_key=True
@@ -115,7 +116,7 @@ class TripPoint(Base):
 
 class Event(Base):
     __tablename__ = "events"
-    __table_args__ = (Index("ix_events_trip_id", "trip_id"),)
+    __table_args__ = (Index("ix_events_trip_start_ts", "trip_id", "start_ts"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     trip_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("trips.id", ondelete="CASCADE"))
