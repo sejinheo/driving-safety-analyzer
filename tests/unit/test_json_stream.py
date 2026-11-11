@@ -17,7 +17,7 @@ def test_all_items_returned_no_skip(tmp_path: Path) -> None:
     records = [{"id": i} for i in range(5)]
     path = _write(tmp_path, records)
 
-    chunks, rejecteds = zip(*iter_chunks(path, chunk_size=10))
+    chunks, rejecteds = zip(*iter_chunks(path, chunk_size=10), strict=False)
     assert list(chunks[0]) == records
     assert list(rejecteds[0]) == []
 
