@@ -120,3 +120,13 @@ class DataIngestionError(AppError):
 
     def __init__(self, reason: str) -> None:
         super().__init__(message="Data ingestion failed", detail={"reason": reason})
+
+
+class InvalidZoneDataError(AppError):
+    """보호구역 데이터에 유효한 항목이 없는 경우."""
+
+    code = "INVALID_ZONE_DATA"
+    status_code = 400
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(message=f"Invalid zone data: {reason}", detail={"reason": reason})
