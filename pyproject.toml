@@ -15,6 +15,7 @@ dependencies = [
     "sqlalchemy==2.1.8",
     "psycopg[binary]==3.3.8",
     "structlog==26.1.0",
+    "geoalchemy2==0.17.1",
 ]
 
 [dependency-groups]

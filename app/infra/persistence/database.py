@@ -1,4 +1,4 @@
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.infra.persistence.models import Base
@@ -9,6 +9,9 @@ def build_engine(database_url: str) -> Engine:
 
 
 def create_tables(engine: Engine) -> None:
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        conn.commit()
     Base.metadata.create_all(engine)
 
 

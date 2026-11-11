@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 
+from geoalchemy2 import Geography
 from sqlalchemy import (
     TIMESTAMP,
     BigInteger,
@@ -130,9 +131,11 @@ class Event(Base):
 
 class SchoolZone(Base):
     __tablename__ = "school_zones"
+    __table_args__ = (Index("ix_school_zones_geom", "geom", postgresql_using="gist"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(Text)
     lat: Mapped[float] = mapped_column(Double)
     lon: Mapped[float] = mapped_column(Double)
     radius_m: Mapped[float] = mapped_column(Double)
+    geom: Mapped[Any] = mapped_column(Geography(geometry_type="POINT", srid=4326))
