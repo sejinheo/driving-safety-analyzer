@@ -203,12 +203,13 @@ def test_run_analysis_marks_failed_on_ingest_error(mocker: MockerFixture) -> Non
     mock_session = MagicMock()
     mock_factory.return_value.return_value.__enter__.return_value = mock_session
 
-    analyze_service._run_analysis(
-        run_id=42,
-        file_path=Path("/fake/path.json"),
-        params=_make_params(),
-        db_config=_make_db_config(),
-    )
+    with pytest.raises(RuntimeError, match="disk full"):
+        analyze_service._run_analysis(
+            run_id=42,
+            file_path=Path("/fake/path.json"),
+            params=_make_params(),
+            db_config=_make_db_config(),
+        )
 
     mock_set_status.assert_called_once_with(
         mock_session,
