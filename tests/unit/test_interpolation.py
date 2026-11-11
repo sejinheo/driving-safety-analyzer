@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import polars as pl
 import pytest
 
@@ -7,7 +9,7 @@ from app.domain.pipeline.interpolation import interpolate_rows, interpolate_valu
 _PARAMS = AnalysisParams()
 
 
-def _make_df(**kwargs: list[object]) -> pl.DataFrame:
+def _make_df(**kwargs: Sequence[object]) -> pl.DataFrame:
     n = max(len(v) for v in kwargs.values())
     base: dict[str, list[object]] = {
         "vehicle_id": ["V1"] * n,
