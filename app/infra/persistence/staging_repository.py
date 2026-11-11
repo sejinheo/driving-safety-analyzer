@@ -1,3 +1,7 @@
+from collections.abc import Iterator
+from typing import Final
+
+import polars as pl
 import structlog
 from psycopg import Connection
 from psycopg.errors import DatabaseError, OperationalError
@@ -25,6 +29,65 @@ _UPDATE_CHECKPOINT = """
     SET ingest_next_index = %(ingest_next_index)s
     WHERE id = %(run_id)s
 """
+
+_SELECT_ANALYZE_CHUNK: Final = """
+    SELECT vehicle_id, ts, lat, lon, speed, cell_key,
+           speed_invalid, speed_out_of_range, gps_swapped, gps_invalid
+    FROM raw_records
+    WHERE run_id = %(run_id)s
+      AND (vehicle_id, ts) > (%(last_vehicle)s, %(last_ts)s)
+    ORDER BY vehicle_id, ts
+    LIMIT %(chunk_size)s
+"""
+
+_RAW_RECORDS_SCHEMA: Final = {
+    "vehicle_id": pl.String,
+    "ts": pl.Int64,
+    "lat": pl.Float64,
+    "lon": pl.Float64,
+    "speed": pl.Float64,
+    "cell_key": pl.Int64,
+    "speed_invalid": pl.Boolean,
+    "speed_out_of_range": pl.Boolean,
+    "gps_swapped": pl.Boolean,
+    "gps_invalid": pl.Boolean,
+}
+
+
+def iter_analyze_chunks(
+    conn: Connection,
+    *,
+    run_id: int,
+    last_vehicle: str,
+    last_ts: int,
+    chunk_size: int,
+) -> Iterator[pl.DataFrame]:
+    try:
+        while True:
+            rows = conn.execute(
+                _SELECT_ANALYZE_CHUNK,
+                {
+                    "run_id": run_id,
+                    "last_vehicle": last_vehicle,
+                    "last_ts": last_ts,
+                    "chunk_size": chunk_size,
+                },
+            ).fetchall()
+            if not rows:
+                break
+            df = pl.DataFrame(
+                [dict(zip(_RAW_RECORDS_SCHEMA.keys(), row, strict=False)) for row in rows],
+                schema=_RAW_RECORDS_SCHEMA,
+            )
+            yield df
+            last_vehicle = str(df["vehicle_id"][-1])
+            last_ts = int(df["ts"][-1])
+            if len(rows) < chunk_size:
+                break
+    except OperationalError as exc:
+        raise DbUnavailableError() from exc
+    except DatabaseError as exc:
+        raise DataIngestionError(str(exc)) from exc
 
 
 def save_chunk(
