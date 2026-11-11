@@ -110,3 +110,13 @@ class DbUnavailableError(AppError):
 
     def __init__(self) -> None:
         super().__init__(message="Database is unavailable")
+
+
+class DataIngestionError(AppError):
+    """데이터 적재 중 DB 오류 (제약 조건 위반, 타입 불일치 등)."""
+
+    code = "INTERNAL_ERROR"
+    status_code = 500
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(message="Data ingestion failed", detail={"reason": reason})
