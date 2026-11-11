@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     db_retry_max: int = 3
     db_pool_min_size: int = 2
     db_pool_max_size: int = 10
+    recovery_claim_limit: int = 100
 
     def to_analysis_params(self) -> AnalysisParams:
         return AnalysisParams(

@@ -1,15 +1,16 @@
 import asyncio
 import hashlib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import cast
 
 import polars as pl
 import structlog
 from psycopg import Connection
 from sqlalchemy.orm import Session
 
+from app.application._protocols import BackgroundTasks, DbConfig
 from app.application.dto.analyze_dto import AcceptedResponse
 from app.domain.enums import RunStatus
 from app.domain.exceptions import EmptyLogFileError
@@ -31,27 +32,17 @@ from app.infra.storage.raw_file_store import save_upload_and_hash
 logger = structlog.get_logger(__name__)
 
 
-class _BackgroundTasks(Protocol):
-    def add_task(self, func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> None: ...
-
-
-class _DbConfig(Protocol):
-    database_url: str
-    db_pool_min_size: int
-    db_pool_max_size: int
-
-
 async def accept(
     *,
     stream: AsyncIterator[bytes] | None,
     vehicle_id_query: str | None,
-    background_tasks: _BackgroundTasks,
+    background_tasks: BackgroundTasks,
     session: Session,
     params: AnalysisParams,
     storage_dir: Path,
     default_log_path: Path,
     max_upload_mb: int,
-    db_config: _DbConfig,
+    db_config: DbConfig,
 ) -> AcceptedResponse:
     if stream is None:
         file_path = default_log_path
@@ -88,7 +79,7 @@ def _run_analysis(
     run_id: int,
     file_path: Path,
     params: AnalysisParams,
-    db_config: _DbConfig,
+    db_config: DbConfig,
 ) -> None:
     pool = get_pool(db_config.database_url, db_config.db_pool_min_size, db_config.db_pool_max_size)
     factory = get_session_factory(db_config.database_url)

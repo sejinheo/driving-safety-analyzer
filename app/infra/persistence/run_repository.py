@@ -154,5 +154,25 @@ def complete_run(
         raise DbUnavailableError() from exc
 
 
+_INCOMPLETE_STATUSES: tuple[RunStatus, ...] = (
+    RunStatus.PENDING,
+    RunStatus.INGESTING,
+    RunStatus.ANALYZING,
+)
+
+
+def claim_incomplete_runs(session: Session, *, limit: int) -> list[AnalysisRun]:
+    try:
+        stmt = (
+            select(AnalysisRun)
+            .where(AnalysisRun.status.in_(_INCOMPLETE_STATUSES))
+            .with_for_update(skip_locked=True)
+            .limit(limit)
+        )
+        return list(session.scalars(stmt))
+    except OperationalError as exc:
+        raise DbUnavailableError() from exc
+
+
 def _is_unique_violation(exc: Exception) -> bool:
     return isinstance(exc.__cause__, UniqueViolation)
