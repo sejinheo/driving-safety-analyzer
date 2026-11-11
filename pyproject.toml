@@ -16,6 +16,7 @@ dependencies = [
     "psycopg[binary,pool]==3.3.8",
     "structlog==26.1.0",
     "geoalchemy2==0.17.1",
+    "httpx2>=2.16.0",
 ]
 
 [dependency-groups]
