@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -18,12 +18,13 @@ def create_run(
     session: Session,
     *,
     file_hash: str,
+    zone_hash: str,
     file_path: str,
     params: dict[str, Any],
     vehicle_id_default: str,
 ) -> AnalysisRun:
     try:
-        existing = get_run_for_update(session, file_hash=file_hash)
+        existing = get_run_for_update(session, file_hash=file_hash, zone_hash=zone_hash)
         if existing is not None:
             if existing.status != RunStatus.FAILED:
                 raise DuplicateAnalysisError(file_hash)
@@ -32,6 +33,7 @@ def create_run(
 
         run = AnalysisRun(
             file_hash=file_hash,
+            zone_hash=zone_hash,
             file_path=file_path,
             params=params,
             status=RunStatus.PENDING,
@@ -52,9 +54,13 @@ def create_run(
         raise
 
 
-def get_run_for_update(session: Session, *, file_hash: str) -> AnalysisRun | None:
+def get_run_for_update(session: Session, *, file_hash: str, zone_hash: str) -> AnalysisRun | None:
     try:
-        stmt = select(AnalysisRun).where(AnalysisRun.file_hash == file_hash).with_for_update()
+        stmt = (
+            select(AnalysisRun)
+            .where(AnalysisRun.file_hash == file_hash, AnalysisRun.zone_hash == zone_hash)
+            .with_for_update()
+        )
         return session.execute(stmt).scalar_one_or_none()
     except OperationalError as exc:
         raise DbUnavailableError() from exc
@@ -159,6 +165,22 @@ _INCOMPLETE_STATUSES: tuple[RunStatus, ...] = (
     RunStatus.INGESTING,
     RunStatus.ANALYZING,
 )
+
+
+def fail_stale_runs(session: Session, *, timeout_min: int) -> None:
+    cutoff = datetime.now(UTC) - timedelta(minutes=timeout_min)
+    try:
+        session.execute(
+            update(AnalysisRun)
+            .where(
+                AnalysisRun.status.in_(_INCOMPLETE_STATUSES),
+                AnalysisRun.updated_at < cutoff,
+            )
+            .values(status=RunStatus.FAILED, updated_at=datetime.now(UTC))
+        )
+        logger.info("stale_runs_failed", timeout_min=timeout_min)
+    except OperationalError as exc:
+        raise DbUnavailableError() from exc
 
 
 def claim_incomplete_runs(session: Session, *, limit: int) -> list[AnalysisRun]:

@@ -54,6 +54,5 @@ async def analyze(
         session_factory=session_factory,
         params=params,
         storage_dir=settings.raw_storage_dir,
-        default_log_path=settings.default_log_path,
         max_upload_mb=settings.max_upload_mb,
     )

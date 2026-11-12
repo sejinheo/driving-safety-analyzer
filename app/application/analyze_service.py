@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.application._protocols import BackgroundTasks, CancelEvent
 from app.application.dto.analyze_dto import AcceptedResponse
 from app.domain.enums import RunStatus
-from app.domain.exceptions import EmptyLogFileError
+from app.domain.exceptions import EmptyLogFileError, MissingFileError
 from app.domain.params import AnalysisParams
 from app.domain.pipeline import (
     aggregation,
@@ -43,14 +43,10 @@ async def accept(
     session_factory: sessionmaker[Session],
     params: AnalysisParams,
     storage_dir: Path,
-    default_log_path: Path,
     max_upload_mb: int,
 ) -> AcceptedResponse:
     if stream is None:
-        file_path = default_log_path
-        if file_path.stat().st_size == 0:
-            raise EmptyLogFileError()
-        sha256 = await asyncio.to_thread(_hash_file, file_path)
+        raise MissingFileError()
     else:
         file_path, sha256 = await save_upload_and_hash(
             stream,

@@ -66,6 +66,16 @@ class EmptyLogFileError(AppError):
         super().__init__(message="Log file is empty")
 
 
+class MissingFileError(AppError):
+    """파일 없이 /analyze를 호출한 경우."""
+
+    code = "MISSING_FILE"
+    status_code = 400
+
+    def __init__(self) -> None:
+        super().__init__(message="File is required")
+
+
 class InvalidLogFormatError(AppError):
     """JSON 파싱 불가 또는 최상위가 배열이 아닌 경우."""
 
