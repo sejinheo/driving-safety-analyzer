@@ -38,9 +38,7 @@ def test_request_id_header_present(client: TestClient) -> None:
     assert "x-request-id" in response.headers
 
 
-def test_run_not_found_returns_domain_error(
-    client: TestClient, mocker: MockerFixture
-) -> None:
+def test_run_not_found_returns_domain_error(client: TestClient, mocker: MockerFixture) -> None:
     mocker.patch("app.presentation.api.runs._get_run", side_effect=RunNotFoundError(999))
 
     response = client.get("/runs/999")
@@ -51,12 +49,8 @@ def test_run_not_found_returns_domain_error(
     assert "request_id" in body
 
 
-def test_trip_not_found_returns_domain_error(
-    client: TestClient, mocker: MockerFixture
-) -> None:
-    mocker.patch(
-        "app.presentation.api.trips.get_trip_detail", side_effect=TripNotFoundError(1)
-    )
+def test_trip_not_found_returns_domain_error(client: TestClient, mocker: MockerFixture) -> None:
+    mocker.patch("app.presentation.api.trips.get_trip_detail", side_effect=TripNotFoundError(1))
 
     response = client.get("/trips/1")
 

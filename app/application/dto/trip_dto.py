@@ -16,7 +16,6 @@ class EventDetail(BaseModel):
     detail: dict[str, object]
 
 
-
 class TripDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

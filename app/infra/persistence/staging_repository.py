@@ -11,47 +11,76 @@ from app.domain.exceptions import DataIngestionError, DbUnavailableError, RunNot
 
 logger = structlog.get_logger(__name__)
 
-_RAW_RECORDS_COPY = """
+_RAW_RECORDS_COPY: Final = """
     COPY raw_records (
         run_id, source_index, vehicle_id, ts,
-        lat, lon, speed, cell_key,
+        lat, lon, speed,
         speed_invalid, speed_out_of_range, gps_swapped, gps_invalid
     ) FROM STDIN
 """
 
-_REJECTED_RECORDS_COPY = """
+_REJECTED_RECORDS_COPY: Final = """
     COPY rejected_records (run_id, source_index, raw, reason)
     FROM STDIN
 """
 
-_UPDATE_CHECKPOINT = """
+_UPDATE_CHECKPOINT: Final = """
     UPDATE analysis_runs
-    SET ingest_next_index = %(ingest_next_index)s
+    SET ingest_next_index = %(ingest_next_index)s,
+        updated_at = now()
     WHERE id = %(run_id)s
 """
 
+_DELETE_RAW_RECORDS_CHUNK: Final = """
+    DELETE FROM raw_records
+    WHERE (run_id, source_index) IN (
+        SELECT run_id, source_index FROM raw_records
+        WHERE run_id = %(run_id)s
+        LIMIT %(chunk_size)s
+    )
+"""
+_DELETE_REJECTED_RECORDS_CHUNK: Final = """
+    DELETE FROM rejected_records
+    WHERE id IN (
+        SELECT id FROM rejected_records
+        WHERE run_id = %(run_id)s
+        LIMIT %(chunk_size)s
+    )
+"""
+
 _SELECT_ANALYZE_CHUNK: Final = """
-    SELECT vehicle_id, ts, lat, lon, speed, cell_key,
+    SELECT vehicle_id, ts, source_index, lat, lon, speed,
            speed_invalid, speed_out_of_range, gps_swapped, gps_invalid
     FROM raw_records
     WHERE run_id = %(run_id)s
-      AND (vehicle_id, ts) > (%(last_vehicle)s, %(last_ts)s)
-    ORDER BY vehicle_id, ts
+      AND (vehicle_id, ts, source_index) > (%(last_vehicle)s, %(last_ts)s, %(last_source_index)s)
+    ORDER BY vehicle_id, ts, source_index
     LIMIT %(chunk_size)s
 """
 
 _RAW_RECORDS_SCHEMA: Final = {
     "vehicle_id": pl.String,
     "ts": pl.Int64,
+    "source_index": pl.Int64,
     "lat": pl.Float64,
     "lon": pl.Float64,
     "speed": pl.Float64,
-    "cell_key": pl.Int64,
     "speed_invalid": pl.Boolean,
     "speed_out_of_range": pl.Boolean,
     "gps_swapped": pl.Boolean,
     "gps_invalid": pl.Boolean,
 }
+
+
+_DELETE_CHUNK_SIZE: Final = 10000
+
+
+def delete_staging(conn: Connection, *, run_id: int) -> None:
+    params = {"run_id": run_id, "chunk_size": _DELETE_CHUNK_SIZE}
+    while conn.execute(_DELETE_RAW_RECORDS_CHUNK, params).rowcount > 0:
+        pass
+    while conn.execute(_DELETE_REJECTED_RECORDS_CHUNK, params).rowcount > 0:
+        pass
 
 
 def iter_analyze_chunks(
@@ -60,6 +89,7 @@ def iter_analyze_chunks(
     run_id: int,
     last_vehicle: str,
     last_ts: int,
+    last_source_index: int,
     chunk_size: int,
 ) -> Iterator[pl.DataFrame]:
     try:
@@ -70,18 +100,17 @@ def iter_analyze_chunks(
                     "run_id": run_id,
                     "last_vehicle": last_vehicle,
                     "last_ts": last_ts,
+                    "last_source_index": last_source_index,
                     "chunk_size": chunk_size,
                 },
             ).fetchall()
             if not rows:
                 break
-            df = pl.DataFrame(
-                [dict(zip(_RAW_RECORDS_SCHEMA.keys(), row, strict=False)) for row in rows],
-                schema=_RAW_RECORDS_SCHEMA,
-            )
+            df = pl.DataFrame(rows, schema=_RAW_RECORDS_SCHEMA, orient="row")
             yield df
             last_vehicle = str(df["vehicle_id"][-1])
             last_ts = int(df["ts"][-1])
+            last_source_index = int(df["source_index"][-1])
             if len(rows) < chunk_size:
                 break
     except OperationalError as exc:
@@ -142,7 +171,6 @@ def _copy_raw_records(
                     r.get("lat"),
                     r.get("lon"),
                     r.get("speed"),
-                    r.get("cell_key"),
                     r["speed_invalid"],
                     r["speed_out_of_range"],
                     r["gps_swapped"],

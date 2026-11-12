@@ -29,9 +29,7 @@ def get_run(session: Session, *, run_id: int) -> RunResponse:
 
     try:
         trip_rows = list(
-            session.scalars(
-                select(Trip).where(Trip.run_id == run_id).order_by(Trip.start_ts)
-            )
+            session.scalars(select(Trip).where(Trip.run_id == run_id).order_by(Trip.start_ts))
         )
     except OperationalError as exc:
         raise DbUnavailableError() from exc

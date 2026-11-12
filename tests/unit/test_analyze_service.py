@@ -21,14 +21,6 @@ def _make_params() -> AnalysisParams:
     return AnalysisParams()
 
 
-def _make_db_config() -> MagicMock:
-    cfg = MagicMock()
-    cfg.database_url = "postgresql+psycopg://test"
-    cfg.db_pool_min_size = 1
-    cfg.db_pool_max_size = 2
-    return cfg
-
-
 @pytest.fixture()
 def default_log(tmp_path: Path) -> Path:
     p = tmp_path / "driving_log.json"
@@ -51,6 +43,7 @@ async def test_accept_new_run_returns_pending_and_registers_background_task(
     bt = MagicMock()
     mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
     mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
+    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
     mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     result = await analyze_service.accept(
@@ -58,11 +51,13 @@ async def test_accept_new_run_returns_pending_and_registers_background_task(
         vehicle_id_query=None,
         background_tasks=bt,
         session=MagicMock(),
+        conn=MagicMock(),
+        pool=MagicMock(),
+        session_factory=MagicMock(),
         params=_make_params(),
         storage_dir=default_log.parent,
         default_log_path=default_log,
         max_upload_mb=10,
-        db_config=_make_db_config(),
     )
 
     assert isinstance(result, AcceptedResponse)
@@ -78,6 +73,7 @@ async def test_accept_completed_run_skips_background_task(
     bt = MagicMock()
     mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
     mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
+    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
     mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     result = await analyze_service.accept(
@@ -85,11 +81,13 @@ async def test_accept_completed_run_skips_background_task(
         vehicle_id_query=None,
         background_tasks=bt,
         session=MagicMock(),
+        conn=MagicMock(),
+        pool=MagicMock(),
+        session_factory=MagicMock(),
         params=_make_params(),
         storage_dir=default_log.parent,
         default_log_path=default_log,
         max_upload_mb=10,
-        db_config=_make_db_config(),
     )
 
     assert result.status == RunStatus.COMPLETED
@@ -106,11 +104,13 @@ async def test_accept_empty_default_log_raises(empty_log: Path) -> None:
             vehicle_id_query=None,
             background_tasks=MagicMock(),
             session=MagicMock(),
+            conn=MagicMock(),
+            pool=MagicMock(),
+            session_factory=MagicMock(),
             params=_make_params(),
             storage_dir=empty_log.parent,
             default_log_path=empty_log,
             max_upload_mb=10,
-            db_config=_make_db_config(),
         )
 
 
@@ -121,6 +121,7 @@ async def test_accept_vehicle_id_query_passed_to_create_run(
     run = _make_run(status=RunStatus.PENDING)
     mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
     mock_create = mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
+    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
     mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     await analyze_service.accept(
@@ -128,11 +129,13 @@ async def test_accept_vehicle_id_query_passed_to_create_run(
         vehicle_id_query="V99",
         background_tasks=MagicMock(),
         session=MagicMock(),
+        conn=MagicMock(),
+        pool=MagicMock(),
+        session_factory=MagicMock(),
         params=_make_params(),
         storage_dir=default_log.parent,
         default_log_path=default_log,
         max_upload_mb=10,
-        db_config=_make_db_config(),
     )
 
     assert mock_create.call_args.kwargs["vehicle_id_default"] == "V99"
@@ -145,6 +148,7 @@ async def test_accept_no_vehicle_id_defaults_to_unknown(
     run = _make_run(status=RunStatus.PENDING)
     mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
     mock_create = mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
+    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
     mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     await analyze_service.accept(
@@ -152,11 +156,13 @@ async def test_accept_no_vehicle_id_defaults_to_unknown(
         vehicle_id_query=None,
         background_tasks=MagicMock(),
         session=MagicMock(),
+        conn=MagicMock(),
+        pool=MagicMock(),
+        session_factory=MagicMock(),
         params=_make_params(),
         storage_dir=default_log.parent,
         default_log_path=default_log,
         max_upload_mb=10,
-        db_config=_make_db_config(),
     )
 
     assert mock_create.call_args.kwargs["vehicle_id_default"] == "UNKNOWN"
@@ -173,6 +179,7 @@ async def test_accept_stream_calls_save_upload_and_hash(
         new=AsyncMock(return_value=(default_log, "deadbeef")),
     )
     mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
+    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
     mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     result = await analyze_service.accept(
@@ -180,11 +187,13 @@ async def test_accept_stream_calls_save_upload_and_hash(
         vehicle_id_query=None,
         background_tasks=MagicMock(),
         session=MagicMock(),
+        conn=MagicMock(),
+        pool=MagicMock(),
+        session_factory=MagicMock(),
         params=_make_params(),
         storage_dir=default_log.parent,
         default_log_path=default_log,
         max_upload_mb=5,
-        db_config=_make_db_config(),
     )
 
     mock_save.assert_called_once()
@@ -195,30 +204,30 @@ async def test_accept_stream_calls_save_upload_and_hash(
 
 def test_run_analysis_marks_failed_on_ingest_error(mocker: MockerFixture) -> None:
     exc = RuntimeError("disk full")
-    mocker.patch("app.application.analyze_service.get_pool")
-    mock_factory = mocker.patch("app.application.analyze_service.get_session_factory")
+    mock_pool = MagicMock()
+    mock_factory = MagicMock()
     mocker.patch("app.application.analyze_service._ingest", side_effect=exc)
     mock_set_status = mocker.patch("app.infra.persistence.run_repository.set_status")
 
-    mock_session = MagicMock()
-    mock_factory.return_value.return_value.__enter__.return_value = mock_session
+    mock_err_session = MagicMock()
+    mock_factory.return_value.__enter__.return_value = mock_err_session
 
     with pytest.raises(RuntimeError, match="disk full"):
-        analyze_service._run_analysis(
+        analyze_service.run_analysis(
             run_id=42,
             file_path=Path("/fake/path.json"),
             params=_make_params(),
-            db_config=_make_db_config(),
+            pool=mock_pool,
+            session_factory=mock_factory,
         )
 
     mock_set_status.assert_called_once_with(
-        mock_session,
+        mock_err_session,
         run_id=42,
         status=RunStatus.FAILED,
         error_message="disk full",
     )
-    mock_session.rollback.assert_called_once()
-    mock_session.commit.assert_called_once()
+    mock_err_session.commit.assert_called_once()
 
 
 async def _fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]

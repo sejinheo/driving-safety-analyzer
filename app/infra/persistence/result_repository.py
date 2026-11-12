@@ -1,3 +1,4 @@
+import json
 from typing import Final, cast
 
 import structlog
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.enums import RunStatus
 from app.domain.exceptions import DataIngestionError, DbUnavailableError, TripNotFoundError
+from app.infra.persistence import staging_repository
 from app.infra.persistence.models import AnalysisRun, Event, Trip
 
 logger = structlog.get_logger(__name__)
@@ -42,7 +44,19 @@ _COPY_EVENTS: Final = """
 _UPDATE_ANALYZE_CHECKPOINT: Final = """
     UPDATE analysis_runs
     SET analyze_last_vehicle = %(last_vehicle)s,
-        analyze_last_ts = %(last_ts)s
+        analyze_last_ts = %(last_ts)s,
+        analyze_last_source_index = %(last_source_index)s,
+        updated_at = now()
+    WHERE id = %(run_id)s
+"""
+
+_COMPLETE_RUN: Final = """
+    UPDATE analysis_runs
+    SET status = 'COMPLETED',
+        finished_at = now(),
+        report = %(report)s,
+        trip_count = %(trip_count)s,
+        event_count = %(event_count)s
     WHERE id = %(run_id)s
 """
 
@@ -56,6 +70,7 @@ def save_trips_batch(
     events: list[dict[str, object]],
     last_vehicle: str,
     last_ts: int,
+    last_source_index: int,
 ) -> None:
     try:
         with conn.transaction():
@@ -64,7 +79,12 @@ def save_trips_batch(
             _copy_events(conn, events=events, trip_id_map=trip_id_map)
             conn.execute(
                 _UPDATE_ANALYZE_CHECKPOINT,
-                {"run_id": run_id, "last_vehicle": last_vehicle, "last_ts": last_ts},
+                {
+                    "run_id": run_id,
+                    "last_vehicle": last_vehicle,
+                    "last_ts": last_ts,
+                    "last_source_index": last_source_index,
+                },
             )
         logger.info(
             "trips_batch_committed",
@@ -77,6 +97,33 @@ def save_trips_batch(
         raise
     except ValueError as exc:
         raise DataIngestionError(str(exc)) from exc
+    except OperationalError as exc:
+        raise DbUnavailableError() from exc
+    except DatabaseError as exc:
+        raise DataIngestionError(str(exc)) from exc
+
+
+def complete_run_conn(
+    conn: Connection,
+    *,
+    run_id: int,
+    report: dict[str, object],
+    trip_count: int,
+    event_count: int,
+) -> None:
+    try:
+        with conn.transaction():
+            conn.execute(
+                _COMPLETE_RUN,
+                {
+                    "run_id": run_id,
+                    "report": Jsonb(report),
+                    "trip_count": trip_count,
+                    "event_count": event_count,
+                },
+            )
+        logger.info("run_completed", run_id=run_id, trip_count=trip_count, event_count=event_count)
+        staging_repository.delete_staging(conn, run_id=run_id)
     except OperationalError as exc:
         raise DbUnavailableError() from exc
     except DatabaseError as exc:
@@ -210,6 +257,6 @@ def _copy_events(
                     e["end_ts"],
                     e.get("lat"),
                     e.get("lon"),
-                    Jsonb(e["detail"]),
+                    Jsonb(json.loads(cast(str, e["detail"]))),
                 )
             )

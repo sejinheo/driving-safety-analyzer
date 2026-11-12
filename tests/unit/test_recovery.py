@@ -17,12 +17,6 @@ def _make_run(*, run_id: int, status: RunStatus, file_path: str | None) -> Magic
     return run
 
 
-def _make_db_config() -> MagicMock:
-    cfg = MagicMock()
-    cfg.database_url = "postgresql+psycopg://test"
-    return cfg
-
-
 @pytest.fixture()
 def existing_file(tmp_path: Path) -> Path:
     p = tmp_path / "run.json"
@@ -35,12 +29,17 @@ def test_recover_requeues_incomplete_runs(existing_file: Path, mocker: MockerFix
         _make_run(run_id=1, status=RunStatus.PENDING, file_path=str(existing_file)),
         _make_run(run_id=2, status=RunStatus.INGESTING, file_path=str(existing_file)),
     ]
-    mocker.patch("app.application.recovery.get_session_factory")
+    mock_factory = MagicMock()
+    mock_factory.return_value.__enter__.return_value = MagicMock()
     mocker.patch("app.infra.persistence.run_repository.claim_incomplete_runs", return_value=runs)
     bt = MagicMock()
 
     requeued = recovery.recover_incomplete_runs(
-        bt, params=AnalysisParams(), db_config=_make_db_config(), claim_limit=100
+        bt,
+        params=AnalysisParams(),
+        session_factory=mock_factory,
+        pool=MagicMock(),
+        claim_limit=100,
     )
 
     assert requeued == 2
@@ -58,12 +57,17 @@ def test_recover_skips_run_when_file_unavailable(
     file_path: str | None, mocker: MockerFixture
 ) -> None:
     runs = [_make_run(run_id=3, status=RunStatus.PENDING, file_path=file_path)]
-    mocker.patch("app.application.recovery.get_session_factory")
+    mock_factory = MagicMock()
+    mock_factory.return_value.__enter__.return_value = MagicMock()
     mocker.patch("app.infra.persistence.run_repository.claim_incomplete_runs", return_value=runs)
     bt = MagicMock()
 
     requeued = recovery.recover_incomplete_runs(
-        bt, params=AnalysisParams(), db_config=_make_db_config(), claim_limit=100
+        bt,
+        params=AnalysisParams(),
+        session_factory=mock_factory,
+        pool=MagicMock(),
+        claim_limit=100,
     )
 
     assert requeued == 0
@@ -77,12 +81,17 @@ def test_recover_counts_only_requeued_not_skipped(
         _make_run(run_id=1, status=RunStatus.PENDING, file_path=str(existing_file)),
         _make_run(run_id=2, status=RunStatus.INGESTING, file_path="/nonexistent/path.json"),
     ]
-    mocker.patch("app.application.recovery.get_session_factory")
+    mock_factory = MagicMock()
+    mock_factory.return_value.__enter__.return_value = MagicMock()
     mocker.patch("app.infra.persistence.run_repository.claim_incomplete_runs", return_value=runs)
     bt = MagicMock()
 
     requeued = recovery.recover_incomplete_runs(
-        bt, params=AnalysisParams(), db_config=_make_db_config(), claim_limit=100
+        bt,
+        params=AnalysisParams(),
+        session_factory=mock_factory,
+        pool=MagicMock(),
+        claim_limit=100,
     )
 
     assert requeued == 1

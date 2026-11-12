@@ -1,27 +1,44 @@
 from collections.abc import Iterator
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import psycopg
-from fastapi import Depends
-from sqlalchemy.orm import Session
+import psycopg_pool
+from fastapi import Depends, Request
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.domain.params import AnalysisParams
-from app.infra.persistence.database import get_pool, get_session_factory
+
+if TYPE_CHECKING:
+    from app.application._protocols import BackgroundTasks
+
+
+def get_pool(request: Request) -> psycopg_pool.ConnectionPool:
+    return request.app.state.pool
+
+
+def get_analysis_pool(request: Request) -> psycopg_pool.ConnectionPool:
+    return request.app.state.analysis_pool
+
+
+def get_session_factory(request: Request) -> sessionmaker[Session]:
+    return request.app.state.session_factory
+
+
+def get_bg_tasks(request: Request) -> "BackgroundTasks":
+    return request.app.state.bg_tasks
 
 
 def get_conn(
-    settings: Annotated[Settings, Depends(get_settings)],
+    pool: Annotated[psycopg_pool.ConnectionPool, Depends(get_pool)],
 ) -> Iterator[psycopg.Connection]:
-    pool = get_pool(settings.database_url, settings.db_pool_min_size, settings.db_pool_max_size)
     with pool.connection() as conn:
         yield conn
 
 
 def get_session(
-    settings: Annotated[Settings, Depends(get_settings)],
+    factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
 ) -> Iterator[Session]:
-    factory = get_session_factory(settings.database_url)
     with factory() as session:
         yield session
 
@@ -33,3 +50,5 @@ def get_params(settings: Annotated[Settings, Depends(get_settings)]) -> Analysis
 ConnDep = Annotated[psycopg.Connection, Depends(get_conn)]
 SessionDep = Annotated[Session, Depends(get_session)]
 ParamsDep = Annotated[AnalysisParams, Depends(get_params)]
+BgTasksDep = Annotated["BackgroundTasks", Depends(get_bg_tasks)]
+AnalysisPoolDep = Annotated[psycopg_pool.ConnectionPool, Depends(get_analysis_pool)]

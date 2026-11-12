@@ -3,22 +3,6 @@ from pydantic import BaseModel, ConfigDict
 from app.domain.enums import EventType, RunStatus
 
 
-class AnalysisReport(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    total_records: int
-    rejected_records: int
-    rejected_by_reason: dict[str, int]
-    duplicates_merged: int
-    speed_nullified: int
-    gps_swapped: int
-    gps_nullified: int
-    gps_teleport_removed: int
-    speed_spikes_removed: int
-    interpolated_values: int
-    interpolated_rows: int
-
-
 class TripSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -35,5 +19,3 @@ class TripSummary(BaseModel):
 class AcceptedResponse(BaseModel):
     run_id: int
     status: RunStatus
-
-
