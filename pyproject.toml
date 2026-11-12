@@ -16,7 +16,6 @@ dependencies = [
     "psycopg[binary,pool]==3.3.8",
     "structlog==26.1.0",
     "geoalchemy2==0.17.1",
-    "httpx2>=2.16.0",
 ]
 
 [dependency-groups]
@@ -28,6 +27,7 @@ dev = [
     "ruff==0.17.4",
     "mypy==2.4.1",
     "import-linter==2.16",
+    "anyio[trio]>=4.0",
 ]
 
 [build-system]
