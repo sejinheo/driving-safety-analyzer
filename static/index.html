@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>자율주행 안전 운행 분석 시스템</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: 0.03em; }
+
+    .container { max-width: 900px; margin: 36px auto; padding: 0 20px; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px 32px;
+      border: 1px solid #e8eaf0;
+      margin-bottom: 28px;
+    }
+    .card h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 20px; color: #1a1a2e; }
+
+    .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.82rem; font-weight: 500; color: #555; }
+    .form-group input[type="text"] {
+      border: 1px solid #ddd;
+      border-radius: 7px;
+      padding: 9px 13px;
+      font-size: 0.93rem;
+      width: 180px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input[type="text"]:focus { border-color: #4f8ef7; }
+
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1.5px dashed #bbb;
+      border-radius: 7px;
+      padding: 9px 16px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      color: #666;
+      transition: border-color 0.2s, color 0.2s;
+      background: #fafafa;
+    }
+    .file-label:hover { border-color: #4f8ef7; color: #4f8ef7; }
+    .file-label.selected { border-color: #4f8ef7; color: #4f8ef7; background: #f0f5ff; }
+    input[type="file"] { display: none; }
+
+    .or-divider { font-size: 0.82rem; color: #aaa; align-self: center; padding-bottom: 2px; }
+
+    .btn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.93rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .btn-primary { background: #4f8ef7; color: #fff; }
+    .btn-primary:hover { background: #2f70e0; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.88rem;
+      color: #555;
+      min-height: 24px;
+      margin-top: 14px;
+    }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-pending  { background: #f5a623; animation: pulse 1.2s infinite; }
+    .dot-done     { background: #22c55e; }
+    .dot-error    { background: #ef4444; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .trip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .trip-card {
+      border: 1.5px solid #e8eaf0;
+      border-radius: 10px;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s;
+      background: #fafbff;
+    }
+    .trip-card:hover { border-color: #4f8ef7; box-shadow: 0 4px 16px rgba(79,142,247,0.13); transform: translateY(-2px); }
+    .trip-card.active { border-color: #4f8ef7; background: #f0f5ff; }
+    .trip-card-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 8px; }
+    .trip-card-meta { font-size: 0.8rem; color: #777; line-height: 1.7; }
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin: 3px 2px 0 0;
+    }
+    .badge-accel  { background: #fff3e0; color: #e65100; }
+    .badge-decel  { background: #fce4ec; color: #c62828; }
+    .badge-school { background: #e8f5e9; color: #2e7d32; }
+
+    .detail-section { margin-top: 0; }
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .detail-header h2 { font-size: 1.05rem; font-weight: 600; }
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 1.3rem;
+      cursor: pointer;
+      color: #aaa;
+      padding: 2px 6px;
+      border-radius: 5px;
+    }
+    .close-btn:hover { color: #555; background: #f0f0f0; }
+
+    .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 24px; margin-bottom: 20px; }
+    .info-item label { display: block; font-size: 0.75rem; color: #888; font-weight: 500; margin-bottom: 2px; }
+    .info-item span { font-size: 0.95rem; font-weight: 600; }
+
+    .events-title { font-size: 0.88rem; font-weight: 600; color: #555; margin-bottom: 10px; }
+    .event-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #f8f9fb;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+    .event-row:last-child { margin-bottom: 0; }
+    .event-type { font-weight: 700; min-width: 90px; text-align: center; }
+    .event-time { color: #888; }
+    .event-speed-wrap { margin-left: auto; display: grid; grid-template-columns: 105px 100px; align-items: center; }
+    .event-speed-val { font-weight: 600; text-align: left; white-space: nowrap; }
+    .event-speed-unit { color: #aaa; font-weight: 400; white-space: nowrap; padding-left: 8px; }
+
+    .empty-state {
+      text-align: center;
+      color: #bbb;
+      padding: 32px 0;
+      font-size: 0.95rem;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>자율주행 안전 운행 분석 시스템</h1>
+</header>
+
+<div class="container">
+
+  <!-- 분석 요청 카드 -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap;">
+      <!-- 메인: 주행 로그 분석 -->
+      <div style="flex:1; min-width:300px;">
+        <h2 style="margin-bottom:20px;">주행 로그 분석</h2>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <input type="text" id="vehicleId" placeholder="Vehicle ID" style="width:100px; font-size:0.82rem; padding:7px 10px; height:34px; border:1px solid #ddd; border-radius:7px; outline:none;">
+          <label class="file-label" id="fileLabel" for="fileInput" style="height:34px; padding:0 14px; font-size:0.82rem; box-sizing:border-box;">
+            <span id="fileLabelText">driving_log.json 업로드</span>
+          </label>
+          <input type="file" id="fileInput" accept=".json">
+          <button class="btn btn-primary" id="analyzeBtn" onclick="startAnalysis()" style="height:34px; padding:0 18px; font-size:0.88rem;">데이터 분석 및 적재</button>
+        </div>
+        <div class="status-bar hidden" id="statusBar">
+          <div class="dot" id="statusDot"></div>
+          <span id="statusText"></span>
+        </div>
+      </div>
+
+      <!-- 보조: 스쿨존 적재 -->
+      <div style="border-left:1px solid #eee; padding-left:24px; min-width:220px;">
+        <p style="font-size:0.78rem; font-weight:600; color:#999; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.05em;">스쿨존 데이터 적재</p>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <label class="file-label" id="zoneFileLabel" for="zoneFileInput" style="font-size:0.82rem; height:34px; padding:0 14px; box-sizing:border-box;">
+            <span id="zoneFileLabelText">school_zones.json 업로드</span>
+          </label>
+          <input type="file" id="zoneFileInput" accept=".json">
+          <button class="btn btn-primary" id="zoneBtn" onclick="uploadZones()" style="font-size:0.82rem; height:34px; padding:0 14px;">DB 적재</button>
+        </div>
+        <div class="status-bar hidden" id="zoneStatusBar" style="margin-top:10px;">
+          <div class="dot" id="zoneStatusDot"></div>
+          <span id="zoneStatusText"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 이전 분석 결과 조회 카드 -->
+  <div class="card">
+    <h2>이전 분석 결과 불러오기</h2>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input type="number" id="runIdInput" placeholder="Run ID" min="1"
+        style="width:110px; height:34px; border:1px solid #ddd; border-radius:7px; padding:0 12px; font-size:0.93rem; outline:none;">
+      <button class="btn btn-primary" onclick="loadRunById()" style="height:34px; padding:0 18px;">불러오기</button>
+    </div>
+    <p style="font-size:0.8rem; color:#aaa; margin-top:10px;">분석 완료 후 반환된 Run ID를 입력하면 Trip 목록을 다시 확인할 수 있습니다.</p>
+  </div>
+
+  <!-- Trip 목록 카드 -->
+  <div class="card hidden" id="tripsCard">
+    <h2 id="tripsTitle">Trip 목록</h2>
+    <p style="font-size:0.82rem;color:#888;margin-bottom:16px;">카드를 클릭하면 주행 거리, 소요 시간, 탐지된 이벤트 목록을 확인할 수 있습니다.</p>
+    <div class="trip-grid" id="tripGrid"></div>
+  </div>
+
+  <!-- Trip 상세 카드 -->
+  <div class="card hidden" id="detailCard">
+    <div class="detail-header">
+      <h2 id="detailTitle">Trip 상세</h2>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-section" id="detailContent"></div>
+  </div>
+
+</div>
+
+<script>
+  let currentRunId = null;
+  let pollTimer = null;
+
+  document.getElementById('zoneFileInput').addEventListener('change', function() {
+    const label = document.getElementById('zoneFileLabel');
+    const text = document.getElementById('zoneFileLabelText');
+    if (this.files.length > 0) {
+      text.textContent = this.files[0].name;
+      label.classList.add('selected');
+    } else {
+      text.textContent = 'school_zones.json 업로드';
+      label.classList.remove('selected');
+    }
+  });
+
+  document.getElementById('fileInput').addEventListener('change', function() {
+    const label = document.getElementById('fileLabel');
+    const text = document.getElementById('fileLabelText');
+    if (this.files.length > 0) {
+      text.textContent = this.files[0].name;
+      label.classList.add('selected');
+    } else {
+      text.textContent = 'driving_log.json 업로드';
+      label.classList.remove('selected');
+    }
+  });
+
+  async function uploadZones() {
+    const file = document.getElementById('zoneFileInput').files[0];
+    if (!file) {
+      setZoneStatus('error', '파일을 선택해주세요.');
+      return;
+    }
+    const btn = document.getElementById('zoneBtn');
+    btn.disabled = true;
+    setZoneStatus('pending', '적재 중...');
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const res = await fetch('/zones', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        setZoneStatus('done', `적재 완료 — ${data.inserted}개 스쿨존 등록`);
+      } else {
+        setZoneStatus('error', data.message || '적재 실패');
+      }
+    } catch (e) {
+      setZoneStatus('error', '네트워크 오류: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function setZoneStatus(state, text) {
+    const bar = document.getElementById('zoneStatusBar');
+    const dot = document.getElementById('zoneStatusDot');
+    const label = document.getElementById('zoneStatusText');
+    bar.classList.remove('hidden');
+    dot.className = 'dot dot-' + (state === 'pending' ? 'pending' : state === 'done' ? 'done' : 'error');
+    label.textContent = text;
+  }
+
+  async function startAnalysis() {
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+
+    setStatus('pending', '분석 요청 중...');
+
+    const vehicleId = document.getElementById('vehicleId').value.trim();
+    const file = document.getElementById('fileInput').files[0];
+
+    let url = '/analyze';
+    const params = new URLSearchParams();
+    if (vehicleId) params.append('vehicle_id', vehicleId);
+    if (params.toString()) url += '?' + params.toString();
+
+    let body = null;
+    let headers = {};
+    if (file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      body = fd;
+    }
+
+    try {
+      const res = await fetch(url, { method: 'POST', headers, body });
+      const data = await res.json();
+
+      if (res.status === 409) {
+        setStatus('error', `이미 처리된 파일입니다 (hash: ${data.detail?.file_hash?.slice(0,12)}…)`);
+        btn.disabled = false;
+        return;
+      }
+      if (!res.ok) {
+        setStatus('error', data.message || '요청 실패');
+        btn.disabled = false;
+        return;
+      }
+
+      currentRunId = data.run_id;
+
+      if (data.status === 'COMPLETED') {
+        setStatus('done', `분석 완료 (run_id: ${currentRunId})`);
+        await loadTrips(currentRunId);
+      } else {
+        setStatus('pending', `분석 중... (run_id: ${currentRunId})`);
+        pollStatus(currentRunId);
+      }
+    } catch (e) {
+      setStatus('error', '네트워크 오류: ' + e.message);
+      btn.disabled = false;
+    }
+  }
+
+  function pollStatus(runId) {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/runs/${runId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'COMPLETED') {
+          clearInterval(pollTimer);
+          setStatus('done', `분석 완료 (run_id: ${runId})`);
+          document.getElementById('analyzeBtn').disabled = false;
+          await loadTrips(runId);
+        } else if (data.status === 'FAILED') {
+          clearInterval(pollTimer);
+          setStatus('error', '분석 실패');
+          document.getElementById('analyzeBtn').disabled = false;
+        } else {
+          setStatus('pending', `분석 중... (상태: ${data.status}, run_id: ${runId})`);
+        }
+      } catch (_) {}
+    }, 2000);
+  }
+
+  async function loadTrips(runId) {
+    const res = await fetch(`/runs/${runId}`);
+    const data = await res.json();
+    const trips = data.trips || [];
+
+    const card = document.getElementById('tripsCard');
+    const title = document.getElementById('tripsTitle');
+    const grid = document.getElementById('tripGrid');
+
+    title.textContent = `Trip 목록 — ${trips.length}개 (run_id: ${runId})`;
+    grid.innerHTML = '';
+
+    if (trips.length === 0) {
+      grid.innerHTML = '<div class="empty-state">감지된 Trip이 없습니다.</div>';
+    } else {
+      trips.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'trip-card';
+        div.onclick = () => loadTripDetail(t.trip_id, div);
+
+        const badges = Object.entries(t.event_counts || {}).map(([type, cnt]) => {
+          const cls = type === 'HARSH_ACCEL' ? 'badge-accel'
+                    : type === 'HARSH_DECEL' ? 'badge-decel' : 'badge-school';
+          const label = type === 'HARSH_ACCEL' ? '급가속'
+                      : type === 'HARSH_DECEL' ? '급감속' : '스쿨존';
+          return `<span class="badge ${cls}">${label} ${cnt}</span>`;
+        }).join('');
+
+        div.innerHTML = `
+          <div class="trip-card-title">Trip #${t.trip_id}</div>
+          <div class="trip-card-meta">
+            <span style="color:#aaa;">Vehicle ID</span> <strong>${t.vehicle_id}</strong><br>
+            <span style="color:#aaa;">소요 시간</span> <strong>${t.duration_sec}초</strong> &nbsp;·&nbsp; <span style="color:#aaa;">주행 거리</span> <strong>${(t.distance_m / 1000).toFixed(2)} km</strong><br>
+            <span style="color:#aaa;">출발</span> <strong>${formatTime(t.start_time)}</strong><br>
+            <span style="color:#aaa;">도착</span> <strong>${formatTime(t.end_time)}</strong>
+          </div>
+          <div style="margin-top:8px">${badges || '<span style="font-size:0.78rem;color:#bbb">이벤트 없음</span>'}</div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+
+    card.classList.remove('hidden');
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function loadTripDetail(tripId, cardEl) {
+    document.querySelectorAll('.trip-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+
+    const res = await fetch(`/trips/${tripId}`);
+    const t = await res.json();
+
+    if (!res.ok) {
+      alert(t.message || `Trip ${tripId}를 찾을 수 없습니다.`);
+      return;
+    }
+
+    const detailCard = document.getElementById('detailCard');
+    document.getElementById('detailTitle').textContent = `Trip #${t.trip_id} 상세`;
+
+    const eventTypeLabel = type =>
+      type === 'HARSH_ACCEL' ? '급가속' :
+      type === 'HARSH_DECEL' ? '급감속' : '스쿨존 과속';
+
+    const eventBadgeClass = type =>
+      type === 'HARSH_ACCEL' ? 'badge-accel' :
+      type === 'HARSH_DECEL' ? 'badge-decel' : 'badge-school';
+
+    const eventsHtml = t.events.length === 0
+      ? '<div class="empty-state" style="padding:16px 0">감지된 이벤트 없음</div>'
+      : t.events.map(e => `
+          <div class="event-row">
+            <span class="badge ${eventBadgeClass(e.type)} event-type">${eventTypeLabel(e.type)}</span>
+            <span class="event-time">${formatTime(e.start_time)}</span>
+            ${e.speed_kmh != null ? `<div class="event-speed-wrap"><span class="event-speed-val">${e.speed_kmh.toFixed(1)} ${'max_change_kmh' in e.detail ? 'km/h/s' : 'km/h'}</span><span class="event-speed-unit">${'max_change_kmh' in e.detail ? '(1초당 변화량)' : '(최고속도)'}</span></div>` : ''}
+          </div>
+        `).join('');
+
+    document.getElementById('detailContent').innerHTML = `
+      <div class="info-grid">
+        <div class="info-item"><label>Vehicle ID</label><span>${t.vehicle_id}</span></div>
+        <div class="info-item"><label>주행 거리</label><span>${(t.distance_m / 1000).toFixed(3)} km</span></div>
+        <div class="info-item"><label>출발</label><span>${formatTime(t.start_time)}</span></div>
+        <div class="info-item"><label>도착</label><span>${formatTime(t.end_time)}</span></div>
+        <div class="info-item"><label>주행 시간</label><span>${t.duration_sec}초</span></div>
+        <div class="info-item"><label>포인트 수</label><span>${t.point_count.toLocaleString()}개</span></div>
+      </div>
+      <div class="events-title">감지된 이벤트 (${t.events.length}건)</div>
+      ${eventsHtml}
+    `;
+
+    detailCard.classList.remove('hidden');
+    detailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function loadRunById() {
+    const runId = document.getElementById('runIdInput').value;
+    if (!runId) return;
+    const res = await fetch(`/runs/${runId}`);
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.message || `Run ${runId}를 찾을 수 없습니다.`);
+      return;
+    }
+    if (data.status !== 'COMPLETED') {
+      alert(`Run ${runId}는 아직 완료되지 않았습니다. (상태: ${data.status})`);
+      return;
+    }
+    await loadTrips(parseInt(runId));
+  }
+
+  function closeDetail() {
+    document.getElementById('detailCard').classList.add('hidden');
+    document.querySelectorAll('.trip-card').forEach(c => c.classList.remove('active'));
+  }
+
+  function setStatus(state, text) {
+    const bar = document.getElementById('statusBar');
+    const dot = document.getElementById('statusDot');
+    const label = document.getElementById('statusText');
+    bar.classList.remove('hidden');
+    dot.className = 'dot dot-' + (state === 'pending' ? 'pending' : state === 'done' ? 'done' : 'error');
+    label.textContent = text;
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return d.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+</script>
+</body>
+</html>
