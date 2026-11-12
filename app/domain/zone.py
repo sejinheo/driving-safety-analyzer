@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from app.domain.params import AnalysisParams
 
@@ -56,9 +57,11 @@ class _MergeEntry:
 
 
 def _to_float(val: object) -> float | None:
-    if val is None:
+    if isinstance(val, bool):
         return None
-    try:
-        return float(val)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
+    if isinstance(val, (int, float, str, Decimal)):
+        try:
+            return float(val)
+        except ValueError:
+            return None
+    return None
