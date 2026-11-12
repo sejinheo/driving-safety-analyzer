@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     db_retry_max: int = 3
     db_pool_min_size: int = 2
     db_pool_max_size: int = 10
+    analysis_pool_min_size: int = 1
+    analysis_pool_max_size: int = 4
     recovery_claim_limit: int = 100
+    stale_run_timeout_min: int = 30
+    zone_query_chunk_size: int = 10000
 
     def to_analysis_params(self) -> AnalysisParams:
         return AnalysisParams(
@@ -55,6 +59,7 @@ class Settings(BaseSettings):
             ts_min=self.ts_min,
             ts_max=self.ts_max,
             db_retry_max=self.db_retry_max,
+            zone_query_chunk_size=self.zone_query_chunk_size,
         )
 
 

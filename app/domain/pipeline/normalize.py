@@ -1,6 +1,3 @@
-import math
-from datetime import UTC, datetime
-
 import polars as pl
 
 from app.domain.params import AnalysisParams
@@ -139,36 +136,3 @@ def _numeric_ts_to_epoch(expr: pl.Expr) -> pl.Expr:
         .otherwise(expr / 1e9)
         .cast(pl.Int64, strict=False)
     )
-
-
-def _parse_ts_single(raw: object) -> int | None:
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, (int, float)):
-        v = float(raw)
-        if math.isnan(v) or math.isinf(v):
-            return None
-        a = abs(v)
-        if a < _TS_MILLI_THRESHOLD:
-            return int(v)
-        if a < _TS_MICRO_THRESHOLD:
-            return int(v / 1e3)
-        if a < _TS_NANO_THRESHOLD:
-            return int(v / 1e6)
-        return int(v / 1e9)
-    if isinstance(raw, str):
-        s = raw.strip()
-        try:
-            return _parse_ts_single(float(s))
-        except ValueError:
-            pass
-        try:
-            if s.endswith("Z"):
-                s = s[:-1] + "+00:00"
-            dt = datetime.fromisoformat(s)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=UTC)
-            return int(dt.timestamp())
-        except ValueError:
-            return None
-    return None

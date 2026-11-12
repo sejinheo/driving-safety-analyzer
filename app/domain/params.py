@@ -22,3 +22,4 @@ class AnalysisParams:
     ts_min: int = 946684800  # 2000-01-01 UTC, 이전 레코드는 이상치로 제거
     ts_max: int = 4102444800  # 2099-12-31 UTC, 이후 레코드는 이상치로 제거
     db_retry_max: int = 3
+    zone_query_chunk_size: int = 10000

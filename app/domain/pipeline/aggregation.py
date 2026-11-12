@@ -6,7 +6,7 @@ import polars as pl
 from app.domain.enums import EventType
 from app.domain.pipeline.geo import EARTH_RADIUS_M
 
-_ALL_EVENT_TYPES: Final[tuple[str, ...]] = tuple(e.value for e in EventType)
+ALL_EVENT_TYPES: Final[tuple[str, ...]] = tuple(e.value for e in EventType)
 
 
 def aggregate_trips(
@@ -17,7 +17,7 @@ def aggregate_trips(
     event_stats = _compute_event_stats(events)
     return trip_stats.join(event_stats, on="trip_id", how="left").with_columns(
         pl.col("event_count").fill_null(0).cast(pl.Int64),
-        *[pl.col(t).fill_null(0).cast(pl.Int64) for t in _ALL_EVENT_TYPES],
+        *[pl.col(t).fill_null(0).cast(pl.Int64) for t in ALL_EVENT_TYPES],
     )
 
 
@@ -68,6 +68,7 @@ def _compute_trip_stats(df: pl.DataFrame) -> pl.DataFrame:
     trip_meta = (
         df.group_by("trip_id")
         .agg(
+            pl.col("vehicle_id").first().alias("vehicle_id"),
             pl.col("ts").min().alias("start_ts"),
             pl.col("ts").max().alias("end_ts"),
             pl.len().alias("point_count"),
@@ -81,7 +82,15 @@ def _compute_trip_stats(df: pl.DataFrame) -> pl.DataFrame:
         trip_meta.join(dist_per_trip, on="trip_id", how="left")
         .with_columns(pl.col("_dist_m").fill_null(0.0).alias("distance_m"))
         .drop("_dist_m")
-        .select("trip_id", "start_ts", "end_ts", "duration_sec", "distance_m", "point_count")
+        .select(
+            "trip_id",
+            "vehicle_id",
+            "start_ts",
+            "end_ts",
+            "duration_sec",
+            "distance_m",
+            "point_count",
+        )
         .cast({"trip_id": pl.Int64, "start_ts": pl.Int64, "end_ts": pl.Int64})
     )
 
@@ -92,18 +101,16 @@ def _compute_event_stats(events: pl.DataFrame) -> pl.DataFrame:
             schema={
                 "trip_id": pl.Int64,
                 "event_count": pl.Int64,
-                **{t: pl.Int64 for t in _ALL_EVENT_TYPES},
+                **{t: pl.Int64 for t in ALL_EVENT_TYPES},
             }
         )
 
     pivot = events.pivot(on="type", index="trip_id", values="type", aggregate_function="len")
 
-    missing = [
-        pl.lit(0).cast(pl.Int64).alias(t) for t in _ALL_EVENT_TYPES if t not in pivot.columns
-    ]
+    missing = [pl.lit(0).cast(pl.Int64).alias(t) for t in ALL_EVENT_TYPES if t not in pivot.columns]
     if missing:
         pivot = pivot.with_columns(*missing)
 
     return pivot.with_columns(
-        pl.sum_horizontal(*[pl.col(t) for t in _ALL_EVENT_TYPES]).alias("event_count"),
-    ).select("trip_id", "event_count", *_ALL_EVENT_TYPES)
+        pl.sum_horizontal(*[pl.col(t) for t in ALL_EVENT_TYPES]).alias("event_count"),
+    ).select("trip_id", "event_count", *ALL_EVENT_TYPES)

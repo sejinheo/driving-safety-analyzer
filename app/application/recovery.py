@@ -1,12 +1,13 @@
 from pathlib import Path
 
+import psycopg_pool
 import structlog
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.application._protocols import BackgroundTasks, DbConfig
-from app.application.analyze_service import _run_analysis
+from app.application._protocols import BackgroundTasks
+from app.application.analyze_service import run_analysis
 from app.domain.params import AnalysisParams
 from app.infra.persistence import run_repository
-from app.infra.persistence.database import get_session_factory
 
 logger = structlog.get_logger(__name__)
 
@@ -15,12 +16,16 @@ def recover_incomplete_runs(
     background_tasks: BackgroundTasks,
     *,
     params: AnalysisParams,
-    db_config: DbConfig,
+    session_factory: sessionmaker[Session],
+    pool: psycopg_pool.ConnectionPool,
     claim_limit: int,
+    stale_timeout_min: int = 30,
 ) -> int:
-    factory = get_session_factory(db_config.database_url)
+    with session_factory() as session:
+        run_repository.fail_stale_runs(session, timeout_min=stale_timeout_min)
+        session.commit()
 
-    with factory() as session:
+    with session_factory() as session:
         runs = run_repository.claim_incomplete_runs(session, limit=claim_limit)
         session.commit()
 
@@ -31,7 +36,7 @@ def recover_incomplete_runs(
             logger.warning("recovery_skipped_missing_file", run_id=run.id, file_path=run.file_path)
             continue
         logger.info("recovery_requeuing", run_id=run.id, status=run.status)
-        background_tasks.add_task(_run_analysis, run.id, file_path, params, db_config)
+        background_tasks.add_task(run_analysis, run.id, file_path, params, pool, session_factory)
         requeued += 1
 
     if requeued:

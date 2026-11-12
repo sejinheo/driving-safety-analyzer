@@ -12,6 +12,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -23,15 +24,19 @@ class Base(DeclarativeBase):
 
 class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
+    __table_args__ = (
+        UniqueConstraint("file_hash", "zone_hash", name="uq_analysis_runs_file_zone"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    file_hash: Mapped[str] = mapped_column(Text, unique=True)
+    file_hash: Mapped[str] = mapped_column(Text)
+    zone_hash: Mapped[str] = mapped_column(Text)
     file_path: Mapped[str | None] = mapped_column(Text)
     params: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(
         Text,
         CheckConstraint(
-            "status IN ('PENDING','INGESTING','ANALYZING','COMPLETED','FAILED')",
+            "status IN ('PENDING','INGESTING','ANALYZING','RECOVERING','COMPLETED','FAILED')",
             name="ck_analysis_runs_status",
         ),
     )
@@ -39,6 +44,7 @@ class AnalysisRun(Base):
     ingest_next_index: Mapped[int] = mapped_column(BigInteger, server_default="0")
     analyze_last_vehicle: Mapped[str | None] = mapped_column(Text)
     analyze_last_ts: Mapped[int | None] = mapped_column(BigInteger)
+    analyze_last_source_index: Mapped[int | None] = mapped_column(BigInteger)
     total_records: Mapped[int | None] = mapped_column(BigInteger)
     rejected_records: Mapped[int | None] = mapped_column(BigInteger)
     report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -46,12 +52,15 @@ class AnalysisRun(Base):
     event_count: Mapped[int | None] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
 
 class RawRecord(Base):
     __tablename__ = "raw_records"
-    __table_args__ = (Index("ix_raw_records_run_vehicle_ts", "run_id", "vehicle_id", "ts"),)
+    __table_args__ = (
+        Index("ix_raw_records_run_vehicle_ts", "run_id", "vehicle_id", "ts", "source_index"),
+    )
 
     run_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("analysis_runs.id"), primary_key=True
@@ -62,7 +71,6 @@ class RawRecord(Base):
     lat: Mapped[float | None] = mapped_column(Double)
     lon: Mapped[float | None] = mapped_column(Double)
     speed: Mapped[float | None] = mapped_column(Double)
-    cell_key: Mapped[int | None] = mapped_column(BigInteger)
     speed_invalid: Mapped[bool] = mapped_column(Boolean)
     speed_out_of_range: Mapped[bool] = mapped_column(Boolean)
     gps_swapped: Mapped[bool] = mapped_column(Boolean)

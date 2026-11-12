@@ -15,15 +15,32 @@ _ACTIVE_STATUSES: Final = (
     RunStatus.PENDING,
     RunStatus.INGESTING,
     RunStatus.ANALYZING,
+    RunStatus.RECOVERING,
 )
 _ACTIVE_STATUS_VALUES: Final = [s.value for s in _ACTIVE_STATUSES]
 
 _CHECK_ACTIVE_RUNS: Final = "SELECT 1 FROM analysis_runs WHERE status = ANY(%s) LIMIT 1"
+_GET_ZONE_HASH: Final = """
+    SELECT md5(
+        string_agg(name || lat::text || lon::text || radius_m::text, ',' ORDER BY name, lat, lon)
+    )
+    FROM school_zones
+"""
 
 _LOCK_ZONES_TABLE: Final = "LOCK TABLE school_zones IN ACCESS EXCLUSIVE MODE"
 _DELETE_ALL_ZONES: Final = "DELETE FROM school_zones"
 
 _COPY_ZONES: Final = "COPY school_zones (name, lat, lon, radius_m, geom) FROM STDIN"
+
+
+def get_current_zone_hash(conn: Connection) -> str:
+    try:
+        row = conn.execute(_GET_ZONE_HASH).fetchone()
+    except OperationalError as exc:
+        raise DbUnavailableError() from exc
+    except DatabaseError as exc:
+        raise DataIngestionError(str(exc)) from exc
+    return row[0] if row and row[0] is not None else ""
 
 
 def replace_all(conn: Connection, *, zones: list[Zone]) -> int:
@@ -63,31 +80,40 @@ _ZONE_HITS_SCHEMA: Final = {
 }
 
 
-def query_zone_hits(df: pl.DataFrame, conn: Connection) -> pl.DataFrame:
+def query_zone_hits(df: pl.DataFrame, conn: Connection, *, chunk_size: int = 10000) -> pl.DataFrame:
     with_coords = df.filter(pl.col("lat").is_not_null() & pl.col("lon").is_not_null())
     if with_coords.is_empty():
         return pl.DataFrame(schema=_ZONE_HITS_SCHEMA)
 
-    try:
-        rows = conn.execute(
-            _QUERY_ZONE_HITS,
-            {
-                "lats": with_coords["lat"].to_list(),
-                "lons": with_coords["lon"].to_list(),
-                "trip_ids": with_coords["trip_id"].to_list(),
-                "tss": with_coords["ts"].to_list(),
-            },
-        ).fetchall()
-    except OperationalError as exc:
-        raise DbUnavailableError() from exc
-    except DatabaseError as exc:
-        raise DataIngestionError(str(exc)) from exc
+    all_rows: list[tuple[int, int, str]] = []
+    n = len(with_coords)
+    for start in range(0, n, chunk_size):
+        chunk = with_coords.slice(start, chunk_size)
+        try:
+            rows = conn.execute(
+                _QUERY_ZONE_HITS,
+                {
+                    "lats": chunk["lat"].to_list(),
+                    "lons": chunk["lon"].to_list(),
+                    "trip_ids": chunk["trip_id"].to_list(),
+                    "tss": chunk["ts"].to_list(),
+                },
+            ).fetchall()
+        except OperationalError as exc:
+            raise DbUnavailableError() from exc
+        except DatabaseError as exc:
+            raise DataIngestionError(str(exc)) from exc
+        all_rows.extend(rows)
 
-    if not rows:
+    if not all_rows:
         return pl.DataFrame(schema=_ZONE_HITS_SCHEMA)
 
     return pl.DataFrame(
-        [{"trip_id": r[0], "ts": r[1], "zone_name": r[2]} for r in rows],
+        {
+            "trip_id": [r[0] for r in all_rows],
+            "ts": [r[1] for r in all_rows],
+            "zone_name": [r[2] for r in all_rows],
+        },
         schema=_ZONE_HITS_SCHEMA,
     )
 

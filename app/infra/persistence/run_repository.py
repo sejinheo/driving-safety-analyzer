@@ -67,7 +67,7 @@ def set_status(
     status: RunStatus,
     error_message: str | None = None,
 ) -> None:
-    values: dict[str, Any] = {"status": status}
+    values: dict[str, Any] = {"status": status, "updated_at": datetime.now(UTC)}
     if status == RunStatus.FAILED:
         values["finished_at"] = datetime.now(UTC)
     if error_message is not None:
