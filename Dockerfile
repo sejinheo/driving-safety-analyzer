@@ -13,7 +13,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project
 
 COPY app/ ./app/
-COPY data/ ./data/
 COPY static/ ./static/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
