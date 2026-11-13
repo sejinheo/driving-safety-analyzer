@@ -75,6 +75,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cancel_event = cancel_event
     app.state.bg_tasks = bg_tasks
 
+    settings.raw_storage_dir.mkdir(parents=True, exist_ok=True)
+
     try:
         create_tables(engine)
     except Exception:
