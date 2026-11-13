@@ -21,33 +21,51 @@ def _make_params() -> AnalysisParams:
     return AnalysisParams()
 
 
-@pytest.fixture()
-def default_log(tmp_path: Path) -> Path:
-    p = tmp_path / "driving_log.json"
-    p.write_text('[{"vehicle_id":"V1","ts":1,"speed":50,"lat":37.5,"lon":127.0}]')
-    return p
+def _mock_save(mocker: MockerFixture, tmp_path: Path, *, empty: bool = False) -> None:
+    p = tmp_path / "log.json"
+    p.write_text("" if empty else '[{"vehicle_id":"V1","ts":1,"speed":50,"lat":37.5,"lon":127.0}]')
+    mocker.patch(
+        "app.application.analyze_service.save_upload_and_hash",
+        new=AsyncMock(return_value=(p, "abc123")),
+    )
 
 
-@pytest.fixture()
-def empty_log(tmp_path: Path) -> Path:
-    p = tmp_path / "empty.json"
-    p.write_text("")
-    return p
+def _mock_common(mocker: MockerFixture) -> None:
+    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
+    mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
+
+
+@pytest.mark.anyio
+async def test_accept_missing_stream_raises(tmp_path: Path) -> None:
+    from app.domain.exceptions import MissingFileError
+
+    with pytest.raises(MissingFileError):
+        await analyze_service.accept(
+            stream=None,
+            vehicle_id_query=None,
+            background_tasks=MagicMock(),
+            session=MagicMock(),
+            conn=MagicMock(),
+            pool=MagicMock(),
+            session_factory=MagicMock(),
+            params=_make_params(),
+            storage_dir=tmp_path,
+            max_upload_mb=10,
+        )
 
 
 @pytest.mark.anyio
 async def test_accept_new_run_returns_pending_and_registers_background_task(
-    default_log: Path, mocker: MockerFixture
+    tmp_path: Path, mocker: MockerFixture
 ) -> None:
     run = _make_run(status=RunStatus.PENDING)
     bt = MagicMock()
-    mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
+    _mock_save(mocker, tmp_path)
+    _mock_common(mocker)
     mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
-    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
-    mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     result = await analyze_service.accept(
-        stream=None,
+        stream=MagicMock(),
         vehicle_id_query=None,
         background_tasks=bt,
         session=MagicMock(),
@@ -55,8 +73,7 @@ async def test_accept_new_run_returns_pending_and_registers_background_task(
         pool=MagicMock(),
         session_factory=MagicMock(),
         params=_make_params(),
-        storage_dir=default_log.parent,
-        default_log_path=default_log,
+        storage_dir=tmp_path,
         max_upload_mb=10,
     )
 
@@ -67,17 +84,16 @@ async def test_accept_new_run_returns_pending_and_registers_background_task(
 
 @pytest.mark.anyio
 async def test_accept_completed_run_skips_background_task(
-    default_log: Path, mocker: MockerFixture
+    tmp_path: Path, mocker: MockerFixture
 ) -> None:
     run = _make_run(status=RunStatus.COMPLETED)
     bt = MagicMock()
-    mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
+    _mock_save(mocker, tmp_path)
+    _mock_common(mocker)
     mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
-    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
-    mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     result = await analyze_service.accept(
-        stream=None,
+        stream=MagicMock(),
         vehicle_id_query=None,
         background_tasks=bt,
         session=MagicMock(),
@@ -85,8 +101,7 @@ async def test_accept_completed_run_skips_background_task(
         pool=MagicMock(),
         session_factory=MagicMock(),
         params=_make_params(),
-        storage_dir=default_log.parent,
-        default_log_path=default_log,
+        storage_dir=tmp_path,
         max_upload_mb=10,
     )
 
@@ -95,12 +110,15 @@ async def test_accept_completed_run_skips_background_task(
 
 
 @pytest.mark.anyio
-async def test_accept_empty_default_log_raises(empty_log: Path) -> None:
+async def test_accept_empty_file_raises(tmp_path: Path, mocker: MockerFixture) -> None:
     from app.domain.exceptions import EmptyLogFileError
+
+    _mock_save(mocker, tmp_path, empty=True)
+    _mock_common(mocker)
 
     with pytest.raises(EmptyLogFileError):
         await analyze_service.accept(
-            stream=None,
+            stream=MagicMock(),
             vehicle_id_query=None,
             background_tasks=MagicMock(),
             session=MagicMock(),
@@ -108,24 +126,22 @@ async def test_accept_empty_default_log_raises(empty_log: Path) -> None:
             pool=MagicMock(),
             session_factory=MagicMock(),
             params=_make_params(),
-            storage_dir=empty_log.parent,
-            default_log_path=empty_log,
+            storage_dir=tmp_path,
             max_upload_mb=10,
         )
 
 
 @pytest.mark.anyio
 async def test_accept_vehicle_id_query_passed_to_create_run(
-    default_log: Path, mocker: MockerFixture
+    tmp_path: Path, mocker: MockerFixture
 ) -> None:
     run = _make_run(status=RunStatus.PENDING)
-    mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
+    _mock_save(mocker, tmp_path)
+    _mock_common(mocker)
     mock_create = mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
-    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
-    mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     await analyze_service.accept(
-        stream=None,
+        stream=MagicMock(),
         vehicle_id_query="V99",
         background_tasks=MagicMock(),
         session=MagicMock(),
@@ -133,8 +149,7 @@ async def test_accept_vehicle_id_query_passed_to_create_run(
         pool=MagicMock(),
         session_factory=MagicMock(),
         params=_make_params(),
-        storage_dir=default_log.parent,
-        default_log_path=default_log,
+        storage_dir=tmp_path,
         max_upload_mb=10,
     )
 
@@ -143,16 +158,15 @@ async def test_accept_vehicle_id_query_passed_to_create_run(
 
 @pytest.mark.anyio
 async def test_accept_no_vehicle_id_defaults_to_unknown(
-    default_log: Path, mocker: MockerFixture
+    tmp_path: Path, mocker: MockerFixture
 ) -> None:
     run = _make_run(status=RunStatus.PENDING)
-    mocker.patch("app.application.analyze_service._hash_file", return_value="abc123")
+    _mock_save(mocker, tmp_path)
+    _mock_common(mocker)
     mock_create = mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
-    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
-    mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     await analyze_service.accept(
-        stream=None,
+        stream=MagicMock(),
         vehicle_id_query=None,
         background_tasks=MagicMock(),
         session=MagicMock(),
@@ -160,8 +174,7 @@ async def test_accept_no_vehicle_id_defaults_to_unknown(
         pool=MagicMock(),
         session_factory=MagicMock(),
         params=_make_params(),
-        storage_dir=default_log.parent,
-        default_log_path=default_log,
+        storage_dir=tmp_path,
         max_upload_mb=10,
     )
 
@@ -170,17 +183,18 @@ async def test_accept_no_vehicle_id_defaults_to_unknown(
 
 @pytest.mark.anyio
 async def test_accept_stream_calls_save_upload_and_hash(
-    default_log: Path, mocker: MockerFixture
+    tmp_path: Path, mocker: MockerFixture
 ) -> None:
     run = _make_run(status=RunStatus.PENDING)
     stream = MagicMock()
+    p = tmp_path / "log.json"
+    p.write_text('[{"vehicle_id":"V1","ts":1,"speed":50,"lat":37.5,"lon":127.0}]')
     mock_save = mocker.patch(
         "app.application.analyze_service.save_upload_and_hash",
-        new=AsyncMock(return_value=(default_log, "deadbeef")),
+        new=AsyncMock(return_value=(p, "deadbeef")),
     )
+    _mock_common(mocker)
     mocker.patch("app.infra.persistence.run_repository.create_run", return_value=run)
-    mocker.patch("app.application.analyze_service.get_current_zone_hash", return_value="zh1")
-    mocker.patch("app.application.analyze_service.asyncio.to_thread", side_effect=_fake_to_thread)
 
     result = await analyze_service.accept(
         stream=stream,
@@ -191,8 +205,7 @@ async def test_accept_stream_calls_save_upload_and_hash(
         pool=MagicMock(),
         session_factory=MagicMock(),
         params=_make_params(),
-        storage_dir=default_log.parent,
-        default_log_path=default_log,
+        storage_dir=tmp_path,
         max_upload_mb=5,
     )
 
