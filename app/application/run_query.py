@@ -25,7 +25,7 @@ def get_run(session: Session, *, run_id: int) -> RunResponse:
 
     status = RunStatus(run.status)
     if status != RunStatus.COMPLETED:
-        return RunResponse(run_id=run.id, status=status)
+        return RunResponse(run_id=run.id, status=status, error_message=run.error_message)
 
     try:
         trip_rows = list(

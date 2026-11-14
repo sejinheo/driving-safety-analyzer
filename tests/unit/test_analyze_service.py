@@ -221,6 +221,9 @@ def test_run_analysis_marks_failed_on_ingest_error(mocker: MockerFixture) -> Non
     mock_factory = MagicMock()
     mocker.patch("app.application.analyze_service._ingest", side_effect=exc)
     mock_set_status = mocker.patch("app.infra.persistence.run_repository.set_status")
+    mock_run = MagicMock()
+    mock_run.status = RunStatus.PENDING.value
+    mocker.patch("app.infra.persistence.run_repository.get_checkpoint", return_value=mock_run)
 
     mock_err_session = MagicMock()
     mock_factory.return_value.__enter__.return_value = mock_err_session

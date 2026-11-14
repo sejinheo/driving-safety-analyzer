@@ -16,6 +16,7 @@ def _make_df(**kwargs: list[object]) -> pl.DataFrame:
     base: dict[str, list[object]] = {
         "vehicle_id": ["V1"] * n,
         "ts": list(range(1_700_000_000, 1_700_000_000 + n)),
+        "source_index": list(range(n)),
         "speed": [60.0] * n,
         "lat": [37.5] * n,
         "lon": [127.0] * n,

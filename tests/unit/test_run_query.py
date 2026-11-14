@@ -9,11 +9,14 @@ from app.domain.enums import RunStatus
 from app.domain.exceptions import RunNotFoundError
 
 
-def _make_run(*, run_id: int, status: RunStatus, report: dict | None = None) -> MagicMock:
+def _make_run(
+    *, run_id: int, status: RunStatus, report: dict | None = None, error_message: str | None = None
+) -> MagicMock:
     run = MagicMock()
     run.id = run_id
     run.status = status.value
     run.report = report
+    run.error_message = error_message
     return run
 
 
