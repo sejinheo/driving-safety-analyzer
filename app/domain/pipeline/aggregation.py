@@ -1,10 +1,9 @@
-import math
 from typing import Final
 
 import polars as pl
 
 from app.domain.enums import EventType
-from app.domain.pipeline.geo import EARTH_RADIUS_M
+from app.domain.pipeline.geo import haversine_expr
 
 ALL_EVENT_TYPES: Final[tuple[str, ...]] = tuple(e.value for e in EventType)
 
@@ -24,21 +23,9 @@ def aggregate_trips(
 def _haversine_per_trip(segments: pl.DataFrame) -> pl.DataFrame:
     return (
         segments.with_columns(
-            (pl.col("lat") * math.pi / 180).alias("_lat1_r"),
-            (pl.col("_next_lat") * math.pi / 180).alias("_lat2_r"),
-            ((pl.col("_next_lat") - pl.col("lat")) * math.pi / 180).alias("_dlat"),
-            ((pl.col("_next_lon") - pl.col("lon")) * math.pi / 180).alias("_dlon"),
-        )
-        .with_columns(
-            (
-                (pl.col("_dlat") / 2).sin().pow(2)
-                + pl.col("_lat1_r").cos()
-                * pl.col("_lat2_r").cos()
-                * (pl.col("_dlon") / 2).sin().pow(2)
-            ).alias("_a")
-        )
-        .with_columns(
-            (pl.col("_a").clip(0.0, 1.0).sqrt().arcsin() * (2 * EARTH_RADIUS_M)).alias("_seg_dist")
+            haversine_expr(
+                pl.col("lat"), pl.col("lon"), pl.col("_next_lat"), pl.col("_next_lon")
+            ).alias("_seg_dist")
         )
         .group_by("trip_id")
         .agg(pl.col("_seg_dist").sum().alias("_dist_m"))

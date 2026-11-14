@@ -2,8 +2,18 @@ import math
 
 import numpy as np
 import numpy.typing as npt
+import polars as pl
 
 EARTH_RADIUS_M: float = 6_371_000.0
+
+
+def haversine_expr(lat1: pl.Expr, lon1: pl.Expr, lat2: pl.Expr, lon2: pl.Expr) -> pl.Expr:
+    dlat = (lat2 - lat1).radians()
+    dlon = (lon2 - lon1).radians()
+    a = (dlat / 2).sin().pow(2) + lat1.radians().cos() * lat2.radians().cos() * (
+        dlon / 2
+    ).sin().pow(2)
+    return EARTH_RADIUS_M * 2 * a.clip(0.0, 1.0).sqrt().arcsin()
 
 
 def haversine_m(

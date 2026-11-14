@@ -1,16 +1,7 @@
 import polars as pl
 
 from app.domain.params import AnalysisParams
-from app.domain.pipeline.geo import EARTH_RADIUS_M
-
-
-def _haversine_expr(lat1: pl.Expr, lon1: pl.Expr, lat2: pl.Expr, lon2: pl.Expr) -> pl.Expr:
-    dlat = (lat2 - lat1).radians()
-    dlon = (lon2 - lon1).radians()
-    a = (dlat / 2).sin().pow(2) + lat1.radians().cos() * lat2.radians().cos() * (
-        dlon / 2
-    ).sin().pow(2)
-    return EARTH_RADIUS_M * 2 * a.clip(0.0, 1.0).sqrt().arcsin()
+from app.domain.pipeline.geo import haversine_expr
 
 
 def merge_duplicates(df: pl.DataFrame) -> tuple[pl.DataFrame, int]:
@@ -19,6 +10,7 @@ def merge_duplicates(df: pl.DataFrame) -> tuple[pl.DataFrame, int]:
     merged = (
         df.group_by("vehicle_id", "ts")
         .agg(
+            pl.col("source_index").min(),
             pl.col("speed").drop_nulls().mean(),
             pl.col("lat").drop_nulls().mean(),
             pl.col("lon").drop_nulls().mean(),
@@ -82,8 +74,8 @@ def remove_gps_teleports(df: pl.DataFrame, params: AnalysisParams) -> pl.DataFra
     dt_next = (pl.col("_next_ts") - pl.col("ts")).cast(pl.Float64)
 
     lat, lon = pl.col("lat"), pl.col("lon")
-    dist_prev = _haversine_expr(lat, lon, pl.col("_prev_lat"), pl.col("_prev_lon"))
-    dist_next = _haversine_expr(lat, lon, pl.col("_next_lat"), pl.col("_next_lon"))
+    dist_prev = haversine_expr(lat, lon, pl.col("_prev_lat"), pl.col("_prev_lon"))
+    dist_next = haversine_expr(lat, lon, pl.col("_next_lat"), pl.col("_next_lon"))
 
     gps_speed_prev = pl.when(dt_prev > 0).then(dist_prev / dt_prev * 3.6)
     gps_speed_next = pl.when(dt_next > 0).then(dist_next / dt_next * 3.6)
