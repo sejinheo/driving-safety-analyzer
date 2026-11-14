@@ -86,43 +86,6 @@ def set_status(
         raise DbUnavailableError() from exc
 
 
-def update_ingest_checkpoint(
-    session: Session,
-    *,
-    run_id: int,
-    ingest_next_index: int,
-    total_records: int | None = None,
-    rejected_records: int | None = None,
-) -> None:
-    values: dict[str, Any] = {"ingest_next_index": ingest_next_index}
-    if total_records is not None:
-        values["total_records"] = total_records
-    if rejected_records is not None:
-        values["rejected_records"] = rejected_records
-
-    try:
-        session.execute(update(AnalysisRun).where(AnalysisRun.id == run_id).values(**values))
-    except OperationalError as exc:
-        raise DbUnavailableError() from exc
-
-
-def update_analyze_checkpoint(
-    session: Session,
-    *,
-    run_id: int,
-    last_vehicle: str,
-    last_ts: int,
-) -> None:
-    try:
-        session.execute(
-            update(AnalysisRun)
-            .where(AnalysisRun.id == run_id)
-            .values(analyze_last_vehicle=last_vehicle, analyze_last_ts=last_ts)
-        )
-    except OperationalError as exc:
-        raise DbUnavailableError() from exc
-
-
 def get_checkpoint(session: Session, *, run_id: int) -> AnalysisRun:
     try:
         stmt = select(AnalysisRun).where(AnalysisRun.id == run_id)
@@ -135,35 +98,11 @@ def get_checkpoint(session: Session, *, run_id: int) -> AnalysisRun:
     return run
 
 
-def complete_run(
-    session: Session,
-    *,
-    run_id: int,
-    report: dict[str, Any],
-    trip_count: int,
-    event_count: int,
-) -> None:
-    try:
-        session.execute(
-            update(AnalysisRun)
-            .where(AnalysisRun.id == run_id)
-            .values(
-                status=RunStatus.COMPLETED,
-                finished_at=datetime.now(UTC),
-                report=report,
-                trip_count=trip_count,
-                event_count=event_count,
-            )
-        )
-        logger.info("run_completed", run_id=run_id, trip_count=trip_count, event_count=event_count)
-    except OperationalError as exc:
-        raise DbUnavailableError() from exc
-
-
 _INCOMPLETE_STATUSES: tuple[RunStatus, ...] = (
     RunStatus.PENDING,
     RunStatus.INGESTING,
     RunStatus.ANALYZING,
+    RunStatus.RECOVERING,
 )
 
 

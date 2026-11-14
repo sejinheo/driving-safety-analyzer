@@ -10,6 +10,8 @@ _TS_NANO_THRESHOLD: float = 1e17
 def normalize(
     df: pl.DataFrame,
     params: AnalysisParams,
+    *,
+    vehicle_id_default: str = "UNKNOWN",
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     rejected_frames: list[pl.DataFrame] = []
 
@@ -80,7 +82,7 @@ def normalize(
         .then(pl.lit(None, dtype=pl.Float64))
         .otherwise(pl.col("lon"))
         .alias("lon"),
-        pl.col("vehicle_id").cast(pl.String).fill_null("UNKNOWN").alias("vehicle_id"),
+        pl.col("vehicle_id").cast(pl.String).fill_null(vehicle_id_default).alias("vehicle_id"),
     )
 
     clean = df.select(
